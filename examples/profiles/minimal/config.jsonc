@@ -19,6 +19,11 @@
     // Default response language.
     "default_response_language": "English"
   },
+  // Audio is unused in keyboard smoke tests.
+  "audio": {
+    // Keep partial microphone preview disabled for this no-audio profile.
+    "partial_transcript_enabled": false
+  },
   // Keyboard mode avoids microphone/STT setup.
   "stt": {
     // No speech model needed.
@@ -31,7 +36,16 @@
     // Placeholder model name.
     "model": "echo",
     // Maximum generated tokens.
-    "max_tokens": 96
+    "max_tokens": 96,
+    // Optional smarter remote model. Disabled for minimal smoke tests.
+    "remote": {
+      // Keep disabled.
+      "enabled": false,
+      // OpenAI-compatible API URL if enabled.
+      "base_url": "http://jankas-mac-mini.local:1234/v1",
+      // Empty string can mean current/default model in LM Studio.
+      "model": ""
+    }
   },
   // Speech is disabled in this profile.
   "tts": {

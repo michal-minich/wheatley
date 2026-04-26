@@ -149,7 +149,8 @@ Reasoning:
 Current behavior:
 
 - `listening...` is green.
-- `answering...` is red after recording stops.
+- `stopped listening.` is red after recording stops.
+- Partial microphone transcript is shown as a rewriting yellow `you~>` preview when enabled.
 - Normal answer text streams to terminal.
 - TTS begins after the first usable phrase or chunk.
 - The first TTS chunk is adaptive, based on persisted LLM/TTS speed stats.

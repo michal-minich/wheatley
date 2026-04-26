@@ -28,6 +28,9 @@ class AudioConfig:
     max_utterance_seconds: float = 14.0
     max_wait_seconds: float = 30.0
     utterance_dir: str = "runtime/audio"
+    partial_transcript_enabled: bool = True
+    partial_transcript_interval_seconds: float = 1.1
+    partial_transcript_min_audio_seconds: float = 1.2
 
 
 @dataclass
@@ -43,6 +46,19 @@ class STTConfig:
 
 
 @dataclass
+class RemoteLLMConfig:
+    enabled: bool = False
+    backend: str = "openai_compat"
+    base_url: str = "http://jankas-mac-mini.local:1234/v1"
+    model: str = ""
+    api_key: str = "EMPTY"
+    probe_timeout_seconds: float = 0.8
+    request_timeout_seconds: float = 120.0
+    online_message: str = "using smarter online model"
+    offline_message: str = "using offline model"
+
+
+@dataclass
 class LLMConfig:
     backend: str = "echo"
     model: str = "qwen3.5:4b"
@@ -54,6 +70,8 @@ class LLMConfig:
     timeout_seconds: float = 60.0
     context_turns: int = 8
     enable_thinking: bool = False
+    strip_reasoning: bool = False
+    remote: RemoteLLMConfig = field(default_factory=RemoteLLMConfig)
 
 
 @dataclass
@@ -181,7 +199,12 @@ def _apply_dict(cfg: Config, raw: Dict[str, Any]) -> Config:
         runtime=RuntimeConfig(**data["runtime"]),
         audio=AudioConfig(**data["audio"]),
         stt=STTConfig(**data["stt"]),
-        llm=LLMConfig(**data["llm"]),
+        llm=LLMConfig(
+            **{
+                **data["llm"],
+                "remote": RemoteLLMConfig(**data["llm"].get("remote", {})),
+            }
+        ),
         tts=TTSConfig(
             **{
                 **data["tts"],

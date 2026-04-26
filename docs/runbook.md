@@ -32,6 +32,14 @@ PYTHONPATH=src python3 -m wheatly --profile wheatly stats
 
 `Remember this: ...` writes to the active profile memory file.
 
+## Smart Remote Model
+
+Per-profile remote model selection is configured in `llm.remote` inside `config.jsonc`. On each new chat the agent probes the configured OpenAI-compatible `/models` endpoint quickly. If reachable, it switches to that backend; otherwise it keeps the local `llm` backend.
+
+## Partial Transcript
+
+`audio.partial_transcript_enabled` controls the live `you~>` preview while recording. It is only a console preview; the final `you>` transcript is still produced from the full utterance and is the only text sent to the LLM.
+
 ## Validation
 
 ```bash

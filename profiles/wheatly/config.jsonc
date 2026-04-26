@@ -10,7 +10,6 @@
     // Default language hint for runtime components.
     "default_language": "en"
   },
-
   // Microphone recording and simple VAD.
   "audio": {
     // Input sample rate expected by STT.
@@ -22,15 +21,20 @@
     // Minimum speech duration before accepting an utterance.
     "min_speech_seconds": 0.45,
     // Silence duration that ends the utterance.
-    "silence_seconds": 0.75,
+    "silence_seconds": 5,
     // Maximum single user utterance duration.
     "max_utterance_seconds": 12.0,
     // Maximum time to wait for speech before timing out.
     "max_wait_seconds": 30.0,
     // Recorded input audio folder.
-    "utterance_dir": "runtime/wheatly/audio"
+    "utterance_dir": "runtime/wheatly/audio",
+    // Show experimental live transcript while the microphone is still recording.
+    "partial_transcript_enabled": true,
+    // How often to run preview STT on the current audio snapshot. Raise on weaker hardware.
+    "partial_transcript_interval_seconds": 1.1,
+    // Minimum captured speech before the first preview STT run.
+    "partial_transcript_min_audio_seconds": 0.2
   },
-
   // Persona identity exposed to prompts.
   "agent": {
     // Assistant display/name in prompts.
@@ -40,7 +44,6 @@
     // Default answer language.
     "default_response_language": "English"
   },
-
   // Speech-to-text backend.
   "stt": {
     // Options: keyboard, faster_whisper, whisper_cpp.
@@ -58,9 +61,10 @@
     // whisper.cpp model path if backend is whisper_cpp.
     "whisper_cpp_model": "models/whisper/ggml-small.en.bin",
     // Extra whisper.cpp arguments.
-    "whisper_cpp_args": ["--no-timestamps"]
+    "whisper_cpp_args": [
+      "--no-timestamps"
+    ]
   },
-
   // Local LLM runtime.
   "llm": {
     // Options: echo, ollama, openai_compat, llama_cpp, vllm, sglang.
@@ -76,15 +80,37 @@
     // Nucleus sampling cutoff.
     "top_p": 0.8,
     // Maximum generated tokens. Prompt still asks for short answers by default.
-    "max_tokens": 220,
+    "max_tokens": 2000,
     // HTTP request timeout.
     "timeout_seconds": 60.0,
     // Number of previous user/assistant turns to keep.
     "context_turns": 6,
     // Disable thinking mode for voice latency.
-    "enable_thinking": false
+    "enable_thinking": false,
+    // Strip <think>/reasoning output. Keep false when the model is configured not to think.
+    "strip_reasoning": false,
+    // Optional smarter OpenAI-compatible model checked at each new chat.
+    "remote": {
+      // If true, try this backend before using the local model.
+      "enabled": true,
+      // Remote backend type. LM Studio uses OpenAI-compatible API.
+      "backend": "openai_compat",
+      // LM Studio OpenAI API base URL. /v1 is accepted here.
+      "base_url": "http://jankas-mac-mini.local:1234/v1",
+      // Model name. Empty string lets LM Studio use its current/default loaded model.
+      "model": "",
+      // API key for OpenAI-compatible servers. LM Studio usually ignores this.
+      "api_key": "EMPTY",
+      // Very fast startup probe timeout.
+      "probe_timeout_seconds": 0.8,
+      // Request timeout after the remote model has been selected.
+      "request_timeout_seconds": 120.0,
+      // Printed/spoken when the remote model is available.
+      "online_message": "using smarter online model",
+      // Printed/spoken when the remote model is not reachable.
+      "offline_message": "using offline model"
+    }
   },
-
   // Text-to-speech and playback.
   "tts": {
     // Options: auto, none, macos_say, piper, external.
@@ -122,15 +148,15 @@
     // Adapt first spoken chunk from observed LLM/TTS speeds.
     "adaptive_streaming": true,
     // First spoken chunk target.
-    "stream_initial_min_words": 12,
+    "stream_initial_min_words": 1,
     // Later spoken chunk target.
-    "stream_min_words": 24,
+    "stream_min_words": 10,
     // Hard cap for spoken chunks.
     "stream_max_words": 60,
     // Fallback first chunk size when startup wait expires.
     "stream_feedback_min_words": 8,
     // Maximum initial wait before some speech feedback starts.
-    "stream_max_initial_wait_seconds": 1.2,
+    "stream_max_initial_wait_seconds": 0.5,
     // External TTS command for backend external. Use {text} and {output} placeholders.
     "external_command": null,
     // Optional ffmpeg post-filter.
@@ -143,7 +169,6 @@
       "preset": "wheatley_bright"
     }
   },
-
   // Local tool policy.
   "tools": {
     // Enable tool calling and deterministic pre-routing.
@@ -153,7 +178,6 @@
     // Optional camera command. Leave null until a camera is configured.
     "photo_command": null
   },
-
   // Editable profile files. Relative paths resolve inside this profile folder.
   "prompts": {
     // Main system behavior.

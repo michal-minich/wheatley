@@ -66,6 +66,8 @@ Voice commands:
 - `Start a new chat.` clears conversation history but keeps profile instructions and memory.
 - `Remember this: ...` appends to the active profile memory.
 
+Remote smart-model fallback is configured per profile in `llm.remote`.
+
 ## Docs
 
 - [Architecture](docs/architecture.md)

@@ -19,6 +19,17 @@
     // Default response language.
     "default_response_language": "English"
   },
+  // Microphone recording and live transcript preview.
+  "audio": {
+    // Recorded input audio folder.
+    "utterance_dir": "runtime/wheatly-qwen35/audio",
+    // Show experimental live transcript while the microphone is still recording.
+    "partial_transcript_enabled": true,
+    // How often to run preview STT on the current audio snapshot. Raise on weaker hardware.
+    "partial_transcript_interval_seconds": 1.1,
+    // Minimum captured speech before the first preview STT run.
+    "partial_transcript_min_audio_seconds": 1.2
+  },
   // Same STT baseline as the active profile.
   "stt": {
     // Speech-to-text backend.
@@ -53,7 +64,18 @@
     // Previous turns to keep.
     "context_turns": 6,
     // Keep off for voice latency unless explicitly testing thinking mode.
-    "enable_thinking": false
+    "enable_thinking": false,
+    // Strip <think>/reasoning output if testing a thinking model.
+    "strip_reasoning": false,
+    // Optional smarter OpenAI-compatible model checked at each new chat.
+    "remote": {
+      // Disabled in this example because the profile itself is already a bigger local experiment.
+      "enabled": false,
+      // OpenAI-compatible API URL if enabled.
+      "base_url": "http://jankas-mac-mini.local:1234/v1",
+      // Empty string can mean current/default model in LM Studio.
+      "model": ""
+    }
   },
   // Voice settings copied from the active Wheatly profile.
   "tts": {
@@ -86,15 +108,15 @@
     // Adapt first chunk from stats.
     "adaptive_streaming": true,
     // First spoken chunk target.
-    "stream_initial_min_words": 12,
+    "stream_initial_min_words": 1,
     // Later spoken chunk target.
-    "stream_min_words": 24,
+    "stream_min_words": 10,
     // Chunk cap.
     "stream_max_words": 60,
     // Fallback chunk size.
-    "stream_feedback_min_words": 8,
+    "stream_feedback_min_words": 1,
     // Max startup wait.
-    "stream_max_initial_wait_seconds": 1.2,
+    "stream_max_initial_wait_seconds": 0.0,
     // Optional post-filter.
     "filter": {
       // Disabled by default.

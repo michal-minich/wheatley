@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
+import threading
+import textwrap
 import time
 from pathlib import Path
 
@@ -106,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "once":
         if args.speak:
             cfg.tts.enabled = True
+        _announce_model_selection(agent, speak=args.speak)
         if args.stream:
             _print_streamed_turn(agent, args.text, speak=args.speak)
         else:
@@ -114,11 +118,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "bench":
+        _announce_model_selection(agent, speak=False)
         return _bench(agent, args.text, args.repeat)
 
     if args.command == "chat":
         if args.speak:
             cfg.tts.enabled = True
+        _announce_model_selection(agent, speak=args.speak)
         return _chat_loop(agent, speak=args.speak, stream=args.stream)
 
     if args.command == "transcribe":
@@ -129,14 +135,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "listen":
         if args.speak:
             cfg.tts.enabled = True
+        _announce_model_selection(agent, speak=args.speak)
         recorder = MicrophoneRecorder(cfg.audio)
+        partial_stt = _enable_partial_transcript_stt(agent, cfg)
         audio_path = (
             Path(cfg.audio.utterance_dir)
             / f"utterance_{int(__import__('time').time())}.wav"
         )
         print(_color("listening...", "green"))
-        recorded = recorder.record_utterance(audio_path)
-        print(_color("answering...", "red"))
+        recorded = _record_with_partial_transcript(recorder, audio_path, partial_stt)
+        print(_color("stopped listening.", "red"))
         transcription = agent.transcribe(recorded)
         _print_user(transcription.text)
         result = agent.handle_text(transcription.text, speak=args.speak)
@@ -145,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "voice":
         cfg.tts.enabled = not args.no_speak
+        _announce_model_selection(agent, speak=not args.no_speak)
         return _voice_loop(
             agent,
             cfg,
@@ -170,11 +179,13 @@ def _chat_loop(agent: VoiceAgent, speak: bool, stream: bool) -> int:
         if _is_exit_command(text):
             return 0
         if _is_new_chat_command(text):
-            agent.reset_chat()
+            selection = agent.reset_chat()
             message = "Starting a new chat."
             _print_turn(message)
+            _print_model_selection(selection)
             if speak:
                 agent.tts.speak(message)
+                agent.tts.speak(selection.message)
             continue
         if stream:
             _print_streamed_turn(agent, text, speak=speak)
@@ -189,14 +200,19 @@ def _print_turn(text: str) -> None:
 
 
 def _print_streamed_turn(agent: VoiceAgent, text: str, speak: bool):
-    sys.stdout.write(_prefix("wheatly", "orange"))
-    sys.stdout.flush()
+    printed_prefix = False
 
     def on_token(token: str) -> None:
+        nonlocal printed_prefix
+        if not printed_prefix:
+            sys.stdout.write(_prefix("wheatly", "orange"))
+            printed_prefix = True
         sys.stdout.write(token)
         sys.stdout.flush()
 
     result = agent.handle_text_stream(text, speak=speak, on_token=on_token)
+    if not printed_prefix:
+        sys.stdout.write(_prefix("wheatly", "orange"))
     sys.stdout.write("\n")
     sys.stdout.flush()
     return result
@@ -227,6 +243,7 @@ def _bench(agent: VoiceAgent, text: str, repeat: int) -> int:
 
 def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -> int:
     recorder = MicrophoneRecorder(cfg.audio)
+    partial_stt = _enable_partial_transcript_stt(agent, cfg)
     print("Wheatly voice loop. Say 'stop', 'quit', or press Ctrl-C to exit.")
     count = 0
     while True:
@@ -238,19 +255,21 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
                 / f"utterance_{int(time.time())}_{count + 1}.wav"
             )
             print(_color("listening...", "green"))
-            recorded = recorder.record_utterance(audio_path)
-            print(_color("answering...", "red"))
+            recorded = _record_with_partial_transcript(recorder, audio_path, partial_stt)
+            print(_color("stopped listening.", "red"))
             transcription = agent.transcribe(recorded)
             text = transcription.text.strip()
             _print_user(text)
             if _is_exit_command(text):
                 return 0
             if _is_new_chat_command(text):
-                agent.reset_chat()
+                selection = agent.reset_chat()
                 message = "Starting a new chat."
                 _print_turn(message)
+                _print_model_selection(selection)
                 if speak:
                     agent.tts.speak(message)
+                    agent.tts.speak(selection.message)
                 count += 1
                 continue
             if stream:
@@ -270,7 +289,14 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
 
 
 def _color(text: str, color: str) -> str:
-    codes = {"green": "32", "red": "31", "yellow": "33", "orange": "38;5;208"}
+    codes = {
+        "green": "32",
+        "red": "31",
+        "yellow": "33",
+        "orange": "38;5;208",
+        "cyan": "36",
+        "magenta": "35",
+    }
     code = codes.get(color)
     if not code:
         return text
@@ -283,6 +309,112 @@ def _prefix(name: str, color: str) -> str:
 
 def _print_user(text: str) -> None:
     sys.stdout.write(f"{_prefix('you', 'yellow')}{text}\n")
+    sys.stdout.flush()
+
+
+def _record_with_partial_transcript(
+    recorder: MicrophoneRecorder, audio_path: Path, partial_stt
+) -> Path:
+    preview = _PartialTranscriptPreview(partial_stt)
+    try:
+        return recorder.record_utterance(
+            audio_path,
+            partial_transcriber=preview.transcribe if preview.enabled else None,
+            on_partial_transcript=preview.update if preview.enabled else None,
+        )
+    finally:
+        preview.finish()
+
+
+class _PartialTranscriptPreview:
+    def __init__(self, stt):
+        self.enabled = stt is not None
+        self.closed = False
+        self.used = False
+        self.rendered_lines = 0
+        self.lock = threading.Lock()
+        self.stt = stt
+
+    def transcribe(self, audio_path: Path) -> str:
+        if not self.stt:
+            return ""
+        return self.stt.transcribe(audio_path).text
+
+    def update(self, text: str) -> None:
+        text = " ".join(text.split())
+        if not text:
+            return
+        with self.lock:
+            if self.closed:
+                return
+            lines = _format_preview_block("you~", "yellow", text)
+            self._clear_rendered_lines()
+            self.used = True
+            self.rendered_lines = len(lines)
+            sys.stdout.write("\n".join(lines))
+            sys.stdout.flush()
+
+    def finish(self) -> None:
+        with self.lock:
+            self.closed = True
+            if self.used:
+                self._clear_rendered_lines()
+                sys.stdout.flush()
+
+    def _clear_rendered_lines(self) -> None:
+        if self.rendered_lines <= 0:
+            return
+        sys.stdout.write("\r\033[2K")
+        for _ in range(self.rendered_lines - 1):
+            sys.stdout.write("\033[1A\r\033[2K")
+        self.rendered_lines = 0
+
+
+def _enable_partial_transcript_stt(agent: VoiceAgent, cfg):
+    backend = cfg.stt.backend.lower().replace("-", "_")
+    if not cfg.audio.partial_transcript_enabled or backend == "keyboard":
+        return None
+    locked_stt = _LockedSTT(agent.stt)
+    agent.stt = locked_stt
+    return locked_stt
+
+
+class _LockedSTT:
+    def __init__(self, stt):
+        self.stt = stt
+        self.lock = threading.Lock()
+
+    def transcribe(self, audio_path: Path):
+        with self.lock:
+            return self.stt.transcribe(audio_path)
+
+
+def _format_preview_block(prefix_name: str, color: str, text: str) -> list[str]:
+    columns = shutil.get_terminal_size((120, 20)).columns
+    plain_prefix = f"{prefix_name}> "
+    width = max(20, columns - len(plain_prefix))
+    parts = textwrap.wrap(
+        text,
+        width=width,
+        break_long_words=False,
+        break_on_hyphens=False,
+    ) or [""]
+    continuation = " " * len(plain_prefix)
+    lines = [f"{_prefix(prefix_name, color)}{parts[0]}"]
+    lines.extend(f"{continuation}{part}" for part in parts[1:])
+    return lines
+
+
+def _announce_model_selection(agent: VoiceAgent, speak: bool) -> None:
+    selection = agent.reset_chat()
+    _print_model_selection(selection)
+    if speak:
+        agent.tts.speak(selection.message)
+
+
+def _print_model_selection(selection) -> None:
+    color = "cyan" if selection.mode == "online" else "magenta"
+    sys.stdout.write(f"{_color('model> ', color)}{selection.message}\n")
     sys.stdout.flush()
 
 

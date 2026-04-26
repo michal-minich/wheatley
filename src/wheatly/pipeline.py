@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import re
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from wheatly.config import Config
-from wheatly.llm.backends import build_llm
+from wheatly.llm.backends import build_llm, remote_llm_available
 from wheatly.llm.base import LLMBackend, LLMMessage
 from wheatly.prompting import build_system_prompt
 from wheatly.runtime_stats import LatencyStats
@@ -31,6 +31,12 @@ class TurnResult:
     duration_seconds: float = 0.0
 
 
+@dataclass
+class ModelSelection:
+    mode: str
+    message: str
+
+
 class VoiceAgent:
     def __init__(
         self,
@@ -47,9 +53,29 @@ class VoiceAgent:
         self.tools = tools or build_registry(cfg)
         self.latency_stats = LatencyStats(Path(cfg.runtime.state_dir) / "latency_stats.json")
         self.history: List[LLMMessage] = []
+        self.model_selection = ModelSelection("offline", cfg.llm.remote.offline_message)
 
-    def reset_chat(self) -> None:
+    def reset_chat(self) -> ModelSelection:
         self.history.clear()
+        return self.select_chat_model()
+
+    def select_chat_model(self) -> ModelSelection:
+        remote = self.cfg.llm.remote
+        if remote.enabled and remote_llm_available(remote):
+            remote_cfg = replace(
+                self.cfg.llm,
+                backend=remote.backend,
+                base_url=remote.base_url,
+                model=remote.model,
+                api_key=remote.api_key,
+                timeout_seconds=remote.request_timeout_seconds,
+            )
+            self.llm = build_llm(remote_cfg)
+            self.model_selection = ModelSelection("online", remote.online_message)
+            return self.model_selection
+        self.llm = build_llm(self.cfg.llm)
+        self.model_selection = ModelSelection("offline", remote.offline_message)
+        return self.model_selection
 
     def transcribe(self, audio_path: Optional[Path] = None) -> Transcription:
         return self.stt.transcribe(audio_path)
