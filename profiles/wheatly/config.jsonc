@@ -33,7 +33,11 @@
     // How often to run preview STT on the current audio snapshot. Raise on weaker hardware.
     "partial_transcript_interval_seconds": 1.1,
     // Minimum captured speech before the first preview STT run.
-    "partial_transcript_min_audio_seconds": 0.2
+    "partial_transcript_min_audio_seconds": 0.2,
+    // Use the last live preview transcript as the final user text when it is fresh enough.
+    "partial_transcript_use_as_final": true,
+    // Maximum age of the last preview transcript at recording end before falling back to full STT.
+    "partial_transcript_final_max_age_seconds": 6.0
   },
   // Persona identity exposed to prompts.
   "agent": {
@@ -87,6 +91,8 @@
         "stt_model": "small.en",
         // STT language hint.
         "stt_language": "en",
+        // TTS backend for English. Keep Piper local/offline here.
+        "tts_backend": "piper",
         // macOS say voice label if that backend is used.
         "tts_voice": "Daniel",
         // Piper voice model for this language.
@@ -95,8 +101,42 @@
         "tts_piper_config": null,
         // Optional Piper speaker id.
         "tts_piper_speaker": null,
+        // Edge TTS voice if this language uses backend edge_tts.
+        "tts_edge_voice": "en-GB-RyanNeural",
+        // Edge TTS rate. Examples: "-5%", "+10%".
+        "tts_edge_rate": "+0%",
+        // Edge TTS pitch. Examples: "+8Hz", "-4Hz".
+        "tts_edge_pitch": "+0Hz",
+        // Edge TTS gain. Examples: "+0%", "+10%".
+        "tts_edge_volume": "+0%",
+        // Piper speed. Lower is faster.
+        "tts_length_scale": 0.62,
+        // Piper voice variation.
+        "tts_noise_scale": 0.72,
+        // Piper prosody variation.
+        "tts_noise_w_scale": 0.82,
+        // Silence inserted after sentences.
+        "tts_sentence_silence": 0.0,
+        // Playback gain multiplier.
+        "tts_volume": 1.05,
+        // Silence prepended before playback to avoid clipped first letters.
+        "tts_leading_silence_ms": 0,
+        // English first streamed TTS chunk target. Higher avoids tiny "Sure." chunks.
+        "tts_stream_initial_min_words": 5,
+        // English later streamed TTS chunk target. Higher reduces playback gaps between sentences.
+        "tts_stream_min_words": 18,
+        // English hard cap for streamed TTS chunks.
+        "tts_stream_max_words": 70,
+        // English minimum timeout fallback chunk size.
+        "tts_stream_feedback_min_words": 10,
+        // English maximum wait before first speech feedback.
+        "tts_stream_max_initial_wait_seconds": 0.35,
         // Spoken/written confirmation after switching.
         "confirmation": "Hi",
+        // Printed/spoken when the smarter online model is selected while starting in English.
+        "online_model_message": "using smarter online model",
+        // Printed/spoken when the local offline model is selected while starting in English.
+        "offline_model_message": "using offline model",
         // Exact-ish phrases that trigger direct switching before the LLM.
         "switch_phrases": [
           "switch to english",
@@ -105,6 +145,12 @@
           "use english",
           "prepni na anglictinu",
           "hovor po anglicky"
+        ],
+        // Generic command phrases spoken in English. If already in English, this toggles to the previous/next language.
+        "switch_language_phrases": [
+          "switch language",
+          "change language",
+          "switch the language"
         ]
       },
       // Slovak quality mode. Medium Whisper is slower but better for Slovak.
@@ -117,16 +163,52 @@
         "stt_model": "medium",
         // STT language hint.
         "stt_language": "sk",
-        // macOS say voice label if that backend is used.
-        "tts_voice": "Lili",
-        // Piper voice model for this language.
+        // Slovak TTS backend. Current default is online Microsoft Edge neural voice for a male voice.
+        "tts_backend": "edge_tts",
+        // Human-readable/current voice label.
+        "tts_voice": "sk-SK-LukasNeural",
+        // Piper fallback voice model. To return to the old local female Slovak voice, set tts_backend to "piper".
         "tts_piper_model": "models/piper/sk_SK-lili-medium.onnx",
         // Optional Piper config path.
         "tts_piper_config": null,
         // Optional Piper speaker id.
         "tts_piper_speaker": null,
+        // Edge TTS Slovak male voice.
+        "tts_edge_voice": "sk-SK-LukasNeural",
+        // Edge TTS speaking rate. Slightly slower for clearer Slovak.
+        "tts_edge_rate": "-4%",
+        // Edge TTS pitch lift to keep it closer to the energetic English character.
+        "tts_edge_pitch": "+8Hz",
+        // Edge TTS gain.
+        "tts_edge_volume": "+0%",
+        // Piper speed. Slovak is slower for clearer pronunciation.
+        "tts_length_scale": 0.84,
+        // Piper voice variation. Slightly lower for a calmer, less sharp Slovak voice.
+        "tts_noise_scale": 0.66,
+        // Piper prosody variation.
+        "tts_noise_w_scale": 0.78,
+        // Silence inserted after sentences.
+        "tts_sentence_silence": 0.04,
+        // Playback gain multiplier.
+        "tts_volume": 1.05,
+        // Silence prepended before playback to avoid clipped first letters.
+        "tts_leading_silence_ms": 80,
+        // Slovak first streamed TTS chunk target.
+        "tts_stream_initial_min_words": 1,
+        // Slovak later streamed TTS chunk target.
+        "tts_stream_min_words": 10,
+        // Slovak hard cap for streamed TTS chunks.
+        "tts_stream_max_words": 60,
+        // Slovak minimum timeout fallback chunk size.
+        "tts_stream_feedback_min_words": 8,
+        // Slovak maximum wait before first speech feedback.
+        "tts_stream_max_initial_wait_seconds": 0.5,
         // Spoken/written confirmation after switching.
         "confirmation": "Ahoj",
+        // Printed/spoken when the smarter online model is selected while starting in Slovak.
+        "online_model_message": "Používam múdrejší online model.",
+        // Printed/spoken when the local offline model is selected while starting in Slovak.
+        "offline_model_message": "Používam offline model.",
         // Exact-ish phrases that trigger direct switching before the LLM.
         "switch_phrases": [
           "switch to slovak",
@@ -136,6 +218,12 @@
           "hovor po slovensky",
           "prepni na slovencinu",
           "prejdi na slovencinu"
+        ],
+        // Generic command phrases spoken in Slovak. If already in Slovak, this toggles to the previous/next language.
+        "switch_language_phrases": [
+          "prepni jazyk",
+          "zmen jazyk",
+          "prehod jazyk"
         ]
       }
     }
@@ -208,30 +296,40 @@
     "piper_config": null,
     // Optional Piper speaker id for multi-speaker models.
     "piper_speaker": null,
+    // Edge TTS voice if backend is edge_tts.
+    "edge_voice": "en-GB-RyanNeural",
+    // Edge TTS speaking rate. Examples: "-5%", "+10%".
+    "edge_rate": "+0%",
+    // Edge TTS pitch adjustment. Examples: "+8Hz", "-4Hz".
+    "edge_pitch": "+0Hz",
+    // Edge TTS volume adjustment. Examples: "+0%", "+10%".
+    "edge_volume": "+0%",
     // Lower is faster speech.
-    "length_scale": 0.66,
+    "length_scale": 0.62,
     // Piper voice variation.
     "noise_scale": 0.72,
     // Piper prosody variation.
     "noise_w_scale": 0.82,
     // Silence inserted after sentences.
-    "sentence_silence": 0.02,
+    "sentence_silence": 0.0,
     // Playback gain multiplier.
     "volume": 1.05,
+    // Silence prepended before playback to avoid clipped first letters.
+    "leading_silence_ms": 0,
     // Speak chunks before the full answer is complete.
     "stream_speech": true,
     // Adapt first spoken chunk from observed LLM/TTS speeds.
     "adaptive_streaming": true,
     // First spoken chunk target.
-    "stream_initial_min_words": 1,
+    "stream_initial_min_words": 5,
     // Later spoken chunk target.
-    "stream_min_words": 10,
+    "stream_min_words": 18,
     // Hard cap for spoken chunks.
-    "stream_max_words": 60,
+    "stream_max_words": 70,
     // Fallback first chunk size when startup wait expires.
-    "stream_feedback_min_words": 8,
+    "stream_feedback_min_words": 10,
     // Maximum initial wait before some speech feedback starts.
-    "stream_max_initial_wait_seconds": 0.5,
+    "stream_max_initial_wait_seconds": 0.35,
     // External TTS command for backend external. Use {text} and {output} placeholders.
     "external_command": null,
     // Optional ffmpeg post-filter.

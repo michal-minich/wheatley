@@ -14,7 +14,7 @@ class RecordingTTS(TTSBackend):
 
 
 class StreamingSpeakerTests(unittest.TestCase):
-    def test_initial_wait_emits_short_first_sentence(self):
+    def test_initial_wait_does_not_emit_tiny_first_sentence(self):
         tts = RecordingTTS()
         with StreamingSpeaker(
             tts,
@@ -27,7 +27,7 @@ class StreamingSpeakerTests(unittest.TestCase):
         ) as speaker:
             speaker.feed("Sure. I can tell you a longer story after that.")
 
-        self.assertEqual(tts.spoken[0], "Sure.")
+        self.assertEqual(tts.spoken[0], "Sure. I can tell you a longer story")
 
     def test_initial_wait_emits_feedback_chunk_without_sentence(self):
         tts = RecordingTTS()

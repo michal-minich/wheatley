@@ -2,7 +2,7 @@
 
 ## Profiles
 
-Active editable files are grouped by persona in `profiles/<name>/`.
+Active editable files are in `profiles/wheatly/`.
 
 ```text
 config.jsonc   runtime, model, STT, TTS, tools and file paths
@@ -12,16 +12,14 @@ tools.jsonc    tool descriptions and tool instructions
 memory.md      persistent memory injected into context
 ```
 
-Examples are in `examples/profiles/`.
-
 ## Commands
 
 ```bash
-./scripts/run_voice_default.sh
-PYTHONPATH=src python3 -m wheatly --profile wheatly chat --stream
-PYTHONPATH=src python3 -m wheatly --profile wheatly once --stream --text "what time is it?"
-PYTHONPATH=src python3 -m wheatly --profile wheatly tools
-PYTHONPATH=src python3 -m wheatly --profile wheatly stats
+./scripts/start_wheatly.sh
+PYTHONPATH=src python3 -m wheatly chat --stream
+PYTHONPATH=src python3 -m wheatly once --stream --text "what time is it?"
+PYTHONPATH=src python3 -m wheatly tools
+PYTHONPATH=src python3 -m wheatly stats
 ```
 
 ## Voice Commands
@@ -35,6 +33,10 @@ PYTHONPATH=src python3 -m wheatly --profile wheatly stats
 `Switch to Slovak.` / `hovor po slovensky` switches STT, prompt language hint, and TTS voice to Slovak and answers `Ahoj`.
 
 `Switch to English.` / `hovor po anglicky` switches back and answers `Hi`.
+
+`Switch language.` / `prepni jazyk` switches to the language of the spoken command. If that is already the active language, it toggles to the previous or next configured language.
+
+Slovak currently defaults to Edge TTS `sk-SK-LukasNeural` for a male voice. The local Piper fallback remains configured in `config.jsonc`. Edge TTS needs the optional `edge-tts` Python package and internet access.
 
 ## Smart Remote Model
 
@@ -51,5 +53,3 @@ make test
 make doctor
 make smoke
 ```
-
-`make PROFILE=other-profile doctor` runs the same target with another profile.

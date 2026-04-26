@@ -118,8 +118,10 @@ def _render_template(text: str, cfg: Config) -> str:
         "{{CURRENT_RESPONSE_LANGUAGE}}": str(language.get("response_language", "")),
         "{{CURRENT_STT_MODEL}}": str(language.get("stt_model", "")),
         "{{CURRENT_STT_LANGUAGE}}": str(language.get("stt_language", "")),
+        "{{CURRENT_TTS_BACKEND}}": str(language.get("tts_backend", "")),
         "{{CURRENT_TTS_VOICE}}": str(language.get("tts_voice", "")),
         "{{CURRENT_TTS_PIPER_MODEL}}": str(language.get("tts_piper_model", "")),
+        "{{CURRENT_TTS_EDGE_VOICE}}": str(language.get("tts_edge_voice", "")),
     }
     for marker, value in replacements.items():
         text = text.replace(marker, value)

@@ -3,7 +3,14 @@ import shutil
 import unittest
 from unittest.mock import patch
 
-from wheatly.cli import _format_preview_block, _is_exit_command, _is_new_chat_command
+from wheatly.cli import (
+    RecordedUtterance,
+    _can_use_partial_as_final,
+    _format_preview_block,
+    _is_exit_command,
+    _is_new_chat_command,
+)
+from wheatly.config import Config
 
 
 class CliCommandTests(unittest.TestCase):
@@ -26,6 +33,29 @@ class CliCommandTests(unittest.TestCase):
         self.assertGreater(len(lines), 1)
         self.assertIn("you~> ", lines[0])
         self.assertTrue(lines[1].startswith("      "))
+
+    def test_fresh_partial_transcript_can_be_used_as_final(self):
+        cfg = Config()
+        cfg.audio.partial_transcript_use_as_final = True
+        cfg.audio.partial_transcript_final_max_age_seconds = 6.0
+        recorded = RecordedUtterance(
+            path=__file__,
+            partial_text="hello from partial",
+            partial_age_seconds=4.0,
+        )
+
+        self.assertTrue(_can_use_partial_as_final(recorded, cfg))
+
+    def test_stale_partial_transcript_is_not_used_as_final(self):
+        cfg = Config()
+        cfg.audio.partial_transcript_final_max_age_seconds = 6.0
+        recorded = RecordedUtterance(
+            path=__file__,
+            partial_text="old partial",
+            partial_age_seconds=7.0,
+        )
+
+        self.assertFalse(_can_use_partial_as_final(recorded, cfg))
 
 
 if __name__ == "__main__":

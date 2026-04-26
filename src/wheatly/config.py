@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import platform
 import shutil
 from dataclasses import asdict, dataclass, field
@@ -31,6 +30,8 @@ class AudioConfig:
     partial_transcript_enabled: bool = True
     partial_transcript_interval_seconds: float = 1.1
     partial_transcript_min_audio_seconds: float = 1.2
+    partial_transcript_use_as_final: bool = True
+    partial_transcript_final_max_age_seconds: float = 6.0
 
 
 @dataclass
@@ -56,8 +57,26 @@ class LanguageOptionConfig:
     tts_piper_model: Optional[str] = "models/piper/en_GB-alan-medium.onnx"
     tts_piper_config: Optional[str] = None
     tts_piper_speaker: Optional[int] = None
+    tts_edge_voice: Optional[str] = None
+    tts_edge_rate: Optional[str] = None
+    tts_edge_pitch: Optional[str] = None
+    tts_edge_volume: Optional[str] = None
+    tts_length_scale: Optional[float] = None
+    tts_noise_scale: Optional[float] = None
+    tts_noise_w_scale: Optional[float] = None
+    tts_sentence_silence: Optional[float] = None
+    tts_volume: Optional[float] = None
+    tts_leading_silence_ms: Optional[int] = None
+    tts_stream_initial_min_words: Optional[int] = None
+    tts_stream_min_words: Optional[int] = None
+    tts_stream_max_words: Optional[int] = None
+    tts_stream_feedback_min_words: Optional[int] = None
+    tts_stream_max_initial_wait_seconds: Optional[float] = None
     confirmation: str = "Hi"
+    online_model_message: Optional[str] = None
+    offline_model_message: Optional[str] = None
     switch_phrases: List[str] = field(default_factory=list)
+    switch_language_phrases: List[str] = field(default_factory=list)
 
 
 def _default_language_options() -> Dict[str, LanguageOptionConfig]:
@@ -67,9 +86,23 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             response_language="English",
             stt_model="small.en",
             stt_language="en",
+            tts_backend="piper",
             tts_voice="Daniel",
             tts_piper_model="models/piper/en_GB-alan-medium.onnx",
+            tts_length_scale=0.62,
+            tts_noise_scale=0.72,
+            tts_noise_w_scale=0.82,
+            tts_sentence_silence=0.0,
+            tts_volume=1.05,
+            tts_leading_silence_ms=0,
+            tts_stream_initial_min_words=5,
+            tts_stream_min_words=18,
+            tts_stream_max_words=70,
+            tts_stream_feedback_min_words=10,
+            tts_stream_max_initial_wait_seconds=0.35,
             confirmation="Hi",
+            online_model_message="using smarter online model",
+            offline_model_message="using offline model",
             switch_phrases=[
                 "switch to english",
                 "speak english",
@@ -78,15 +111,38 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
                 "prepni na anglictinu",
                 "hovor po anglicky",
             ],
+            switch_language_phrases=[
+                "switch language",
+                "change language",
+                "switch the language",
+            ],
         ),
         "sk": LanguageOptionConfig(
             label="Slovak",
             response_language="Slovak",
             stt_model="medium",
             stt_language="sk",
-            tts_voice="Lili",
+            tts_backend="edge_tts",
+            tts_voice="sk-SK-LukasNeural",
             tts_piper_model="models/piper/sk_SK-lili-medium.onnx",
+            tts_edge_voice="sk-SK-LukasNeural",
+            tts_edge_rate="-4%",
+            tts_edge_pitch="+8Hz",
+            tts_edge_volume="+0%",
+            tts_length_scale=0.84,
+            tts_noise_scale=0.66,
+            tts_noise_w_scale=0.78,
+            tts_sentence_silence=0.04,
+            tts_volume=1.05,
+            tts_leading_silence_ms=80,
+            tts_stream_initial_min_words=1,
+            tts_stream_min_words=10,
+            tts_stream_max_words=60,
+            tts_stream_feedback_min_words=8,
+            tts_stream_max_initial_wait_seconds=0.5,
             confirmation="Ahoj",
+            online_model_message="Používam múdrejší online model.",
+            offline_model_message="Používam offline model.",
             switch_phrases=[
                 "switch to slovak",
                 "speak slovak",
@@ -95,6 +151,11 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
                 "hovor po slovensky",
                 "prepni na slovencinu",
                 "prejdi na slovencinu",
+            ],
+            switch_language_phrases=[
+                "prepni jazyk",
+                "zmen jazyk",
+                "prehod jazyk",
             ],
         ),
     }
@@ -159,18 +220,23 @@ class TTSConfig:
     piper_model: str = "models/piper/en_GB-alan-medium.onnx"
     piper_config: Optional[str] = None
     piper_speaker: Optional[int] = None
-    length_scale: float = 0.82
-    noise_scale: float = 0.78
-    noise_w_scale: float = 0.95
-    sentence_silence: float = 0.08
-    volume: float = 1.0
+    edge_voice: str = "en-GB-RyanNeural"
+    edge_rate: str = "+0%"
+    edge_pitch: str = "+0Hz"
+    edge_volume: str = "+0%"
+    length_scale: float = 0.62
+    noise_scale: float = 0.72
+    noise_w_scale: float = 0.82
+    sentence_silence: float = 0.0
+    volume: float = 1.05
+    leading_silence_ms: int = 0
     stream_speech: bool = True
     adaptive_streaming: bool = True
-    stream_initial_min_words: int = 8
-    stream_min_words: int = 14
-    stream_max_words: int = 34
-    stream_feedback_min_words: int = 8
-    stream_max_initial_wait_seconds: float = 2.0
+    stream_initial_min_words: int = 5
+    stream_min_words: int = 18
+    stream_max_words: int = 70
+    stream_feedback_min_words: int = 10
+    stream_max_initial_wait_seconds: float = 0.35
     external_command: Optional[List[str]] = None
     filter: FilterConfig = field(default_factory=FilterConfig)
 
@@ -238,9 +304,9 @@ class Config:
 
 def load_config(path: Optional[str] = None, profile: Optional[str] = None) -> Config:
     cfg = Config()
-    config_path = path or os.getenv("WHEATLY_CONFIG")
+    config_path = path
     if not config_path:
-        profile_name = profile or os.getenv("WHEATLY_PROFILE", "wheatly")
+        profile_name = profile or "wheatly"
         profile_config = profile_config_path(profile_name)
         if profile_config.exists():
             config_path = str(profile_config)

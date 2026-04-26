@@ -8,22 +8,29 @@ import sys
 import threading
 import textwrap
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
-from wheatly.config import load_config, profile_config_path
+from wheatly.config import load_config
 from wheatly.doctor import diagnostics_json
 from wheatly.language import match_language_switch
 from wheatly.pipeline import VoiceAgent
 from wheatly.runtime_stats import LatencyStats
 from wheatly.stt.microphone import MicrophoneRecorder
+from wheatly.stt.base import Transcription
 from wheatly.tools.builtins import build_registry
 from wheatly.tts.backends import build_tts
 
 
+@dataclass
+class RecordedUtterance:
+    path: Path
+    partial_text: str = ""
+    partial_age_seconds: float | None = None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="wheatly")
-    parser.add_argument("--config", help="Path to JSON config file.")
-    parser.add_argument("--profile", help="Profile folder under profiles/. Defaults to WHEATLY_PROFILE or wheatly.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="Show environment diagnostics.")
@@ -62,11 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     voice.add_argument("--no-stream", action="store_true", help="Disable token streaming.")
 
     args = parser.parse_args(argv)
-    if args.config and args.profile:
-        raise SystemExit("Use either --config or --profile, not both.")
-    if args.profile and not profile_config_path(args.profile).exists():
-        raise SystemExit(f"Missing profile config: {profile_config_path(args.profile)}")
-    cfg = load_config(args.config, profile=args.profile)
+    cfg = load_config()
 
     if args.command == "doctor":
         print(diagnostics_json(cfg))
@@ -147,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             recorder, audio_path, partial_transcriber
         )
         print(_color("stopped listening.", "red"))
-        transcription = agent.transcribe(recorded)
+        transcription = _transcribe_with_status(agent, recorded, cfg)
         _print_user(transcription.text)
         _handle_text_turn(
             agent, transcription.text, speak=args.speak, stream=False
@@ -276,7 +279,7 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
                 recorder, audio_path, partial_transcriber
             )
             print(_color("stopped listening.", "red"))
-            transcription = agent.transcribe(recorded)
+            transcription = _transcribe_with_status(agent, recorded, cfg)
             text = transcription.text.strip()
             _print_user(text)
             if _is_exit_command(text):
@@ -331,22 +334,48 @@ def _print_user(text: str) -> None:
     sys.stdout.flush()
 
 
+def _transcribe_with_status(agent: VoiceAgent, recorded: RecordedUtterance, cfg):
+    if _can_use_partial_as_final(recorded, cfg):
+        return Transcription(
+            text=recorded.partial_text,
+            language=cfg.stt.language,
+            duration_seconds=None,
+        )
+    print(_color("transcribing...", "cyan"))
+    return agent.transcribe(recorded.path)
+
+
+def _can_use_partial_as_final(recorded: RecordedUtterance, cfg) -> bool:
+    if not cfg.audio.partial_transcript_use_as_final:
+        return False
+    if not recorded.partial_text:
+        return False
+    if recorded.partial_age_seconds is None:
+        return False
+    return recorded.partial_age_seconds <= cfg.audio.partial_transcript_final_max_age_seconds
+
+
 def _is_language_switch_result(result) -> bool:
     return any(item.name == "set_language" and item.ok for item in result.tool_results)
 
 
 def _record_with_partial_transcript(
     recorder: MicrophoneRecorder, audio_path: Path, partial_transcriber
-) -> Path:
+) -> RecordedUtterance:
     preview = _PartialTranscriptPreview(partial_transcriber)
     try:
-        return recorder.record_utterance(
+        path = recorder.record_utterance(
             audio_path,
             partial_transcriber=preview.transcribe if preview.enabled else None,
             on_partial_transcript=preview.update if preview.enabled else None,
         )
     finally:
         preview.finish()
+    return RecordedUtterance(
+        path=path,
+        partial_text=preview.last_text,
+        partial_age_seconds=preview.partial_age_seconds(),
+    )
 
 
 class _PartialTranscriptPreview:
@@ -354,6 +383,8 @@ class _PartialTranscriptPreview:
         self.enabled = transcriber is not None
         self.closed = False
         self.used = False
+        self.last_text = ""
+        self.last_update_at = None
         self.rendered_lines = 0
         self.lock = threading.Lock()
         self.transcriber = transcriber
@@ -373,6 +404,8 @@ class _PartialTranscriptPreview:
             lines = _format_preview_block("you~", "yellow", text)
             self._clear_rendered_lines()
             self.used = True
+            self.last_text = text
+            self.last_update_at = time.monotonic()
             self.rendered_lines = len(lines)
             sys.stdout.write("\n".join(lines))
             sys.stdout.flush()
@@ -391,6 +424,11 @@ class _PartialTranscriptPreview:
         for _ in range(self.rendered_lines - 1):
             sys.stdout.write("\033[1A\r\033[2K")
         self.rendered_lines = 0
+
+    def partial_age_seconds(self) -> float | None:
+        if self.last_update_at is None:
+            return None
+        return time.monotonic() - self.last_update_at
 
 
 def _build_partial_transcriber(agent: VoiceAgent, cfg):

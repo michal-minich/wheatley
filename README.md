@@ -13,19 +13,19 @@ microphone -> STT -> LLM -> tools -> streaming text -> TTS -> speaker
 Default profile:
 
 ```bash
-./scripts/run_voice_default.sh
+./scripts/start_wheatly.sh
 ```
 
 Equivalent:
 
 ```bash
-PYTHONPATH=src python3 -m wheatly --profile wheatly voice
+PYTHONPATH=src python3 -m wheatly voice
 ```
 
 One text turn:
 
 ```bash
-PYTHONPATH=src python3 -m wheatly --profile wheatly once --stream --text "hello"
+PYTHONPATH=src python3 -m wheatly once --stream --text "hello"
 ```
 
 ## Profiles
@@ -43,13 +43,7 @@ profiles/wheatly/
 
 `config.jsonc` is the main file. It contains comments next to the settings, so prefer editing it over duplicating settings in docs.
 
-Use another persona:
-
-```bash
-PYTHONPATH=src python3 -m wheatly --profile my-persona chat --stream
-```
-
-Examples live under `examples/profiles/`. Copy one into `profiles/` and edit it.
+The default runtime uses `profiles/wheatly/config.jsonc`. Keep runtime choices in that config instead of passing startup flags.
 
 ## Useful Commands
 
@@ -65,6 +59,7 @@ Voice commands:
 - `Stop.` exits the voice loop.
 - `Start a new chat.` clears conversation history but keeps profile instructions and memory.
 - `Remember this: ...` appends to the active profile memory.
+- `Switch language.` / `prepni jazyk` toggles between configured languages.
 
 Remote smart-model fallback is configured per profile in `llm.remote`.
 

@@ -10,7 +10,7 @@ Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 
 
 - Python package under `src/wheatly`.
 - CLI entrypoint: `python3 -m wheatly` or installed `wheatly`.
-- Config format: JSONC profile folders under `profiles/<name>/`.
+- Config format: JSONC profile folder under `profiles/wheatly/`.
 - Editable prompts live beside each profile config as `system.md`, `user.md`, and `tools.jsonc`.
 - Persistent memory lives beside each profile config as `memory.md` and is injected into the system prompt.
 - Runtime files live under `runtime/<profile>/` by convention.
@@ -41,8 +41,8 @@ Before handing back changes, run:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
-PYTHONPATH=src python3 -m wheatly --profile wheatly doctor
-PYTHONPATH=src python3 -m wheatly --profile wheatly once --text "what time is it?"
+PYTHONPATH=src python3 -m wheatly doctor
+PYTHONPATH=src python3 -m wheatly once --text "what time is it?"
 ```
 
 If external dependencies or models are unavailable, note that clearly and keep the echo backend smoke tests passing.

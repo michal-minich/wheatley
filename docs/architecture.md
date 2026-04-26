@@ -35,7 +35,7 @@ End-to-end multimodal/audio models remain interesting for later experiments, but
 - `wheatly.pipeline`: turn orchestration and conversation history.
 - `wheatly.stt`: keyboard, faster-whisper, and whisper.cpp adapters.
 - `wheatly.llm`: echo, Ollama, and OpenAI-compatible adapters.
-- `wheatly.tts`: no-op, macOS say, and Piper adapters.
+- `wheatly.tts`: no-op, macOS say, Piper, Edge TTS, and external command adapters.
 - `wheatly.audio`: playback and ffmpeg post-filter.
 - `wheatly.tools`: deterministic whitelist tools and parser.
 
@@ -43,7 +43,7 @@ End-to-end multimodal/audio models remain interesting for later experiments, but
 
 The system prompt is assembled by `wheatly.prompting.build_system_prompt()`.
 
-Each persona is a profile folder under `profiles/<name>/`:
+The active persona is the profile folder under `profiles/wheatly/`:
 
 - `config.jsonc`: runtime, model, voice, tool and path settings.
 - `system.md`: main assistant behavior and tool-calling rules.
@@ -51,7 +51,7 @@ Each persona is a profile folder under `profiles/<name>/`:
 - `tools.jsonc`: editable tool descriptions and tool-specific instructions.
 - `memory.md`: persistent memory injected into context.
 
-Profile text files can use template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, `{{DEFAULT_RESPONSE_LANGUAGE}}`, `{{ACTIVE_LANGUAGE_HINT}}`, `{{CURRENT_LANGUAGE_CODE}}`, `{{CURRENT_LANGUAGE_LABEL}}`, `{{CURRENT_STT_MODEL}}`, and `{{CURRENT_TTS_VOICE}}`.
+Profile text files can use template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, `{{DEFAULT_RESPONSE_LANGUAGE}}`, `{{ACTIVE_LANGUAGE_HINT}}`, `{{CURRENT_LANGUAGE_CODE}}`, `{{CURRENT_LANGUAGE_LABEL}}`, `{{CURRENT_STT_MODEL}}`, `{{CURRENT_TTS_BACKEND}}`, `{{CURRENT_TTS_VOICE}}`, and `{{CURRENT_TTS_EDGE_VOICE}}`.
 
 The live transcribed utterance or text is passed as the final user message to `VoiceAgent.handle_text*()`. Persistent memory is not a search tool; it is injected automatically into the system prompt at the start of every turn, including after a new chat reset.
 

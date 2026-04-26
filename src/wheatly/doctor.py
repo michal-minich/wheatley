@@ -31,6 +31,7 @@ def collect_diagnostics(cfg: Config) -> Dict[str, object]:
             "sounddevice": _has_package("sounddevice"),
             "numpy": _has_package("numpy"),
             "faster_whisper": _has_package("faster_whisper"),
+            "edge_tts": _has_package("edge_tts"),
         },
     }
 
@@ -41,4 +42,3 @@ def diagnostics_json(cfg: Config) -> str:
 
 def _has_package(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
-

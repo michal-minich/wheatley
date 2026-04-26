@@ -81,7 +81,8 @@ Initial candidates:
 
 - Kokoro for English quality and speed.
 - Piper for reliability and low resource use.
-- Piper `sk_SK-lili-medium` for Slovak later.
+- Piper `sk_SK-lili-medium` for local Slovak fallback.
+- Edge TTS `sk-SK-LukasNeural` for the current male Slovak voice.
 
 Voice direction: lightly compressed, narrow-band, slightly synthetic, still intelligible. Avoid heavy robot effects.
 
@@ -134,7 +135,7 @@ Current default:
 - LLM: `qwen3.5:4b` through Ollama.
 - STT: `faster-whisper small.en`, int8 CPU.
 - TTS: Piper `en_GB-alan-medium`.
-- Run command: `./scripts/run_voice_default.sh`.
+- Run command: `./scripts/start_wheatly.sh`.
 
 ## D10: Stream Text And Start TTS Early
 
@@ -180,22 +181,22 @@ Decision: keep assistant instructions, user preferences, tool descriptions, and 
 
 Files:
 
-- `profiles/<name>/system.md`
-- `profiles/<name>/user.md`
-- `profiles/<name>/tools.jsonc`
-- `profiles/<name>/memory.md`
+- `profiles/wheatly/system.md`
+- `profiles/wheatly/user.md`
+- `profiles/wheatly/tools.jsonc`
+- `profiles/wheatly/memory.md`
 
 The `remember` tool appends short facts to the active profile memory. Memory is injected into the system prompt on every turn, so the model does not need a separate retrieval command to use it. `Start a new chat.` clears conversation history but keeps the editable prompts and persistent memory.
 
 ## D13: Profile Folder Layout
 
-Decision: group all persona-specific editable files under `profiles/<name>/`.
+Decision: group all persona-specific editable files under `profiles/wheatly/`.
 
 Reasoning:
 
-- Multiple talking AIs can share the same code.
+- The active profile doubles as the working example.
 - Config, prompts, tool wording, voice settings and memory travel together.
-- Examples stay under `examples/profiles/` so they do not compete with the active profile.
+- The active `profiles/wheatly/` config is the canonical example and runtime config.
 - Main configs use `.jsonc` because comments belong next to settings.
 
 ## D14: Explicit Language Switching
@@ -213,4 +214,5 @@ Current behavior:
 
 - `switch to Slovak`, `speak Slovak`, `hovor po slovensky`, and `prepni na slovencinu` switch to Slovak.
 - `switch to English`, `speak English`, `hovor po anglicky`, and `prepni na anglictinu` switch to English.
+- `switch language` and `prepni jazyk` switch based on the language of the command; if already active, they toggle to the previous or next configured language.
 - Switching prints a blue `language>` line and speaks only `Ahoj` or `Hi`.

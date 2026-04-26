@@ -109,7 +109,9 @@ class StreamingSpeaker:
         if match:
             segment = self._buffer[: match.end()].strip()
             segment_words = len(segment.split())
-            if segment_words >= min_words or (waited_too_long and segment_words > 0):
+            if segment_words >= min_words or (
+                waited_too_long and segment_words >= self.feedback_min_words
+            ):
                 self._buffer = self._buffer[match.end() :]
                 return segment
 

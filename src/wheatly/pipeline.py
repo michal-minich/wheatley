@@ -13,6 +13,7 @@ from wheatly.config import Config
 from wheatly.language import (
     apply_configured_language,
     match_language_switch,
+    model_selection_message,
     read_language_state,
     set_language_state,
 )
@@ -62,7 +63,10 @@ class VoiceAgent:
         self.tools = tools or build_registry(cfg)
         self.latency_stats = LatencyStats(Path(cfg.runtime.state_dir) / "latency_stats.json")
         self.history: List[LLMMessage] = []
-        self.model_selection = ModelSelection("offline", cfg.llm.remote.offline_message)
+        self.model_selection = ModelSelection(
+            "offline",
+            model_selection_message(self.cfg, "offline"),
+        )
 
     def reset_chat(self) -> ModelSelection:
         self.history.clear()
@@ -80,10 +84,16 @@ class VoiceAgent:
                 timeout_seconds=remote.request_timeout_seconds,
             )
             self.llm = build_llm(remote_cfg)
-            self.model_selection = ModelSelection("online", remote.online_message)
+            self.model_selection = ModelSelection(
+                "online",
+                model_selection_message(self.cfg, "online"),
+            )
             return self.model_selection
         self.llm = build_llm(self.cfg.llm)
-        self.model_selection = ModelSelection("offline", remote.offline_message)
+        self.model_selection = ModelSelection(
+            "offline",
+            model_selection_message(self.cfg, "offline"),
+        )
         return self.model_selection
 
     def transcribe(self, audio_path: Optional[Path] = None) -> Transcription:

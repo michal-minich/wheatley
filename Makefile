@@ -1,7 +1,6 @@
 PYTHON ?= python3
 PYTHONPATH := src
-PROFILE ?= wheatly
-WHEATLY := PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m wheatly --profile $(PROFILE)
+WHEATLY := PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m wheatly
 
 .PHONY: test doctor smoke bench tools stats voice
 
@@ -24,4 +23,4 @@ stats:
 	. .venv/bin/activate 2>/dev/null || true; $(WHEATLY) stats
 
 voice:
-	./scripts/run_voice_default.sh
+	./scripts/start_wheatly.sh
