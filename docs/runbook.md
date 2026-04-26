@@ -32,6 +32,10 @@ PYTHONPATH=src python3 -m wheatly --profile wheatly stats
 
 `Remember this: ...` writes to the active profile memory file.
 
+`Switch to Slovak.` / `hovor po slovensky` switches STT, prompt language hint, and TTS voice to Slovak and answers `Ahoj`.
+
+`Switch to English.` / `hovor po anglicky` switches back and answers `Hi`.
+
 ## Smart Remote Model
 
 Per-profile remote model selection is configured in `llm.remote` inside `config.jsonc`. On each new chat the agent probes the configured OpenAI-compatible `/models` endpoint quickly. If reachable, it switches to that backend; otherwise it keeps the local `llm` backend.

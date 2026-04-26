@@ -51,7 +51,7 @@ Each persona is a profile folder under `profiles/<name>/`:
 - `tools.jsonc`: editable tool descriptions and tool-specific instructions.
 - `memory.md`: persistent memory injected into context.
 
-Profile text files can use template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, and `{{DEFAULT_RESPONSE_LANGUAGE}}`.
+Profile text files can use template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, `{{DEFAULT_RESPONSE_LANGUAGE}}`, `{{ACTIVE_LANGUAGE_HINT}}`, `{{CURRENT_LANGUAGE_CODE}}`, `{{CURRENT_LANGUAGE_LABEL}}`, `{{CURRENT_STT_MODEL}}`, and `{{CURRENT_TTS_VOICE}}`.
 
 The live transcribed utterance or text is passed as the final user message to `VoiceAgent.handle_text*()`. Persistent memory is not a search tool; it is injected automatically into the system prompt at the start of every turn, including after a new chat reset.
 

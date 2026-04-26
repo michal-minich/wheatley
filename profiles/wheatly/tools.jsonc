@@ -36,6 +36,13 @@
       // When and how the model should use it.
       "instructions": "Use this when the user says phrases like \"remember this\", \"remember that\", or asks you to remember a preference, fact, name, project detail, or instruction for later."
     },
+    // Active spoken language switch.
+    "set_language": {
+      // What the model sees as the tool purpose.
+      "description": "Switch the active conversation language between English and Slovak.",
+      // When and how the model should use it.
+      "instructions": "Use this when the user explicitly asks to speak English, speak Slovak, hovor po slovensky, or prepni na anglictinu. Do not switch language unless it is explicit."
+    },
     // Camera placeholder.
     "take_photo": {
       // What the model sees as the tool purpose.

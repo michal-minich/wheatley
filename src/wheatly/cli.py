@@ -12,6 +12,7 @@ from pathlib import Path
 
 from wheatly.config import load_config, profile_config_path
 from wheatly.doctor import diagnostics_json
+from wheatly.language import match_language_switch
 from wheatly.pipeline import VoiceAgent
 from wheatly.runtime_stats import LatencyStats
 from wheatly.stt.microphone import MicrophoneRecorder
@@ -111,10 +112,9 @@ def main(argv: list[str] | None = None) -> int:
             cfg.tts.enabled = True
         _announce_model_selection(agent, speak=args.speak)
         if args.stream:
-            _print_streamed_turn(agent, args.text, speak=args.speak)
+            _handle_text_turn(agent, args.text, speak=args.speak, stream=True)
         else:
-            result = agent.handle_text(args.text, speak=args.speak)
-            _print_turn(result.assistant_text)
+            _handle_text_turn(agent, args.text, speak=args.speak, stream=False)
         return 0
 
     if args.command == "bench":
@@ -137,18 +137,21 @@ def main(argv: list[str] | None = None) -> int:
             cfg.tts.enabled = True
         _announce_model_selection(agent, speak=args.speak)
         recorder = MicrophoneRecorder(cfg.audio)
-        partial_stt = _enable_partial_transcript_stt(agent, cfg)
+        partial_transcriber = _build_partial_transcriber(agent, cfg)
         audio_path = (
             Path(cfg.audio.utterance_dir)
             / f"utterance_{int(__import__('time').time())}.wav"
         )
         print(_color("listening...", "green"))
-        recorded = _record_with_partial_transcript(recorder, audio_path, partial_stt)
+        recorded = _record_with_partial_transcript(
+            recorder, audio_path, partial_transcriber
+        )
         print(_color("stopped listening.", "red"))
         transcription = agent.transcribe(recorded)
         _print_user(transcription.text)
-        result = agent.handle_text(transcription.text, speak=args.speak)
-        _print_turn(result.assistant_text)
+        _handle_text_turn(
+            agent, transcription.text, speak=args.speak, stream=False
+        )
         return 0
 
     if args.command == "voice":
@@ -187,16 +190,29 @@ def _chat_loop(agent: VoiceAgent, speak: bool, stream: bool) -> int:
                 agent.tts.speak(message)
                 agent.tts.speak(selection.message)
             continue
-        if stream:
-            _print_streamed_turn(agent, text, speak=speak)
-        else:
-            result = agent.handle_text(text, speak=speak)
-            _print_turn(result.assistant_text)
+        _handle_text_turn(agent, text, speak=speak, stream=stream)
 
 
-def _print_turn(text: str) -> None:
-    sys.stdout.write(f"{_prefix('wheatly', 'orange')}{text}\n")
+def _handle_text_turn(agent: VoiceAgent, text: str, speak: bool, stream: bool) -> None:
+    if stream and not match_language_switch(agent.cfg, text):
+        result = _print_streamed_turn(agent, text, speak=speak)
+        if _is_language_switch_result(result):
+            _print_language_turn(result.assistant_text)
+        return
+    result = agent.handle_text(text, speak=speak)
+    if _is_language_switch_result(result):
+        _print_language_turn(result.assistant_text)
+    else:
+        _print_turn(result.assistant_text)
+
+
+def _print_turn(text: str, name: str = "wheatly", color: str = "orange") -> None:
+    sys.stdout.write(f"{_prefix(name, color)}{text}\n")
     sys.stdout.flush()
+
+
+def _print_language_turn(text: str) -> None:
+    _print_turn(text, name="language", color="blue")
 
 
 def _print_streamed_turn(agent: VoiceAgent, text: str, speak: bool):
@@ -211,9 +227,10 @@ def _print_streamed_turn(agent: VoiceAgent, text: str, speak: bool):
         sys.stdout.flush()
 
     result = agent.handle_text_stream(text, speak=speak, on_token=on_token)
-    if not printed_prefix:
-        sys.stdout.write(_prefix("wheatly", "orange"))
-    sys.stdout.write("\n")
+    if printed_prefix:
+        sys.stdout.write("\n")
+    elif result.assistant_text and not _is_language_switch_result(result):
+        sys.stdout.write(f"{_prefix('wheatly', 'orange')}{result.assistant_text}\n")
     sys.stdout.flush()
     return result
 
@@ -243,7 +260,7 @@ def _bench(agent: VoiceAgent, text: str, repeat: int) -> int:
 
 def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -> int:
     recorder = MicrophoneRecorder(cfg.audio)
-    partial_stt = _enable_partial_transcript_stt(agent, cfg)
+    partial_transcriber = _build_partial_transcriber(agent, cfg)
     print("Wheatly voice loop. Say 'stop', 'quit', or press Ctrl-C to exit.")
     count = 0
     while True:
@@ -255,7 +272,9 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
                 / f"utterance_{int(time.time())}_{count + 1}.wav"
             )
             print(_color("listening...", "green"))
-            recorded = _record_with_partial_transcript(recorder, audio_path, partial_stt)
+            recorded = _record_with_partial_transcript(
+                recorder, audio_path, partial_transcriber
+            )
             print(_color("stopped listening.", "red"))
             transcription = agent.transcribe(recorded)
             text = transcription.text.strip()
@@ -273,10 +292,9 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
                 count += 1
                 continue
             if stream:
-                _print_streamed_turn(agent, text, speak=speak)
+                _handle_text_turn(agent, text, speak=speak, stream=True)
             else:
-                result = agent.handle_text(text, speak=speak)
-                _print_turn(result.assistant_text)
+                _handle_text_turn(agent, text, speak=speak, stream=False)
             count += 1
         except KeyboardInterrupt:
             print()
@@ -296,6 +314,7 @@ def _color(text: str, color: str) -> str:
         "orange": "38;5;208",
         "cyan": "36",
         "magenta": "35",
+        "blue": "34",
     }
     code = codes.get(color)
     if not code:
@@ -312,10 +331,14 @@ def _print_user(text: str) -> None:
     sys.stdout.flush()
 
 
+def _is_language_switch_result(result) -> bool:
+    return any(item.name == "set_language" and item.ok for item in result.tool_results)
+
+
 def _record_with_partial_transcript(
-    recorder: MicrophoneRecorder, audio_path: Path, partial_stt
+    recorder: MicrophoneRecorder, audio_path: Path, partial_transcriber
 ) -> Path:
-    preview = _PartialTranscriptPreview(partial_stt)
+    preview = _PartialTranscriptPreview(partial_transcriber)
     try:
         return recorder.record_utterance(
             audio_path,
@@ -327,18 +350,18 @@ def _record_with_partial_transcript(
 
 
 class _PartialTranscriptPreview:
-    def __init__(self, stt):
-        self.enabled = stt is not None
+    def __init__(self, transcriber):
+        self.enabled = transcriber is not None
         self.closed = False
         self.used = False
         self.rendered_lines = 0
         self.lock = threading.Lock()
-        self.stt = stt
+        self.transcriber = transcriber
 
     def transcribe(self, audio_path: Path) -> str:
-        if not self.stt:
+        if not self.transcriber:
             return ""
-        return self.stt.transcribe(audio_path).text
+        return self.transcriber(audio_path)
 
     def update(self, text: str) -> None:
         text = " ".join(text.split())
@@ -370,23 +393,11 @@ class _PartialTranscriptPreview:
         self.rendered_lines = 0
 
 
-def _enable_partial_transcript_stt(agent: VoiceAgent, cfg):
+def _build_partial_transcriber(agent: VoiceAgent, cfg):
     backend = cfg.stt.backend.lower().replace("-", "_")
     if not cfg.audio.partial_transcript_enabled or backend == "keyboard":
         return None
-    locked_stt = _LockedSTT(agent.stt)
-    agent.stt = locked_stt
-    return locked_stt
-
-
-class _LockedSTT:
-    def __init__(self, stt):
-        self.stt = stt
-        self.lock = threading.Lock()
-
-    def transcribe(self, audio_path: Path):
-        with self.lock:
-            return self.stt.transcribe(audio_path)
+    return lambda audio_path: agent.transcribe(audio_path).text
 
 
 def _format_preview_block(prefix_name: str, color: str, text: str) -> list[str]:

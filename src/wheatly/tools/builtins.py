@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict
 
 from wheatly.config import Config
+from wheatly.language import language_status_payload, set_language_state
 from wheatly.prompting import load_tool_overrides
 from wheatly.tools.registry import ToolRegistry, ToolResult, ToolSpec
 
@@ -92,6 +93,23 @@ def build_registry(cfg: Config) -> ToolRegistry:
     )
     registry.register(
         ToolSpec(
+            name="set_language",
+            description="Switch the active conversation language between English and Slovak.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "language": {
+                        "type": "string",
+                        "enum": sorted(cfg.language.languages),
+                    }
+                },
+                "required": ["language"],
+            },
+        ),
+        lambda args: _set_language(cfg, args),
+    )
+    registry.register(
+        ToolSpec(
             name="take_photo",
             description="Capture a photo if a configured safe camera command exists.",
             parameters={"type": "object", "properties": {}},
@@ -155,6 +173,7 @@ def _robot_status(cfg: Config) -> ToolResult:
             "llm_backend": cfg.llm.backend,
             "stt_backend": cfg.stt.backend,
             "tts_backend": cfg.resolved_tts_backend(),
+            "language": language_status_payload(cfg),
             "eye": eye or {"expression": "neutral"},
         },
     )
@@ -219,6 +238,11 @@ def _remember(cfg: Config, args: Dict[str, object]) -> ToolResult:
         ok=True,
         content={"memory": memory, "path": str(path)},
     )
+
+
+def _set_language(cfg: Config, args: Dict[str, object]) -> ToolResult:
+    ok, content = set_language_state(cfg, str(args.get("language", "")))
+    return ToolResult(name="set_language", ok=ok, content=content)
 
 
 def _take_photo(cfg: Config) -> ToolResult:

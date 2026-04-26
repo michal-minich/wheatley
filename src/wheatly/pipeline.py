@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
@@ -9,6 +10,12 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from wheatly.config import Config
+from wheatly.language import (
+    apply_configured_language,
+    match_language_switch,
+    read_language_state,
+    set_language_state,
+)
 from wheatly.llm.backends import build_llm, remote_llm_available
 from wheatly.llm.base import LLMBackend, LLMMessage
 from wheatly.prompting import build_system_prompt
@@ -47,7 +54,9 @@ class VoiceAgent:
         tools: Optional[ToolRegistry] = None,
     ):
         self.cfg = cfg
+        apply_configured_language(self.cfg, read_language_state(self.cfg))
         self.llm = llm or build_llm(cfg.llm)
+        self.stt_lock = threading.Lock()
         self.stt = stt or build_stt(cfg.stt)
         self.tts = tts or build_tts(cfg)
         self.tools = tools or build_registry(cfg)
@@ -78,7 +87,16 @@ class VoiceAgent:
         return self.model_selection
 
     def transcribe(self, audio_path: Optional[Path] = None) -> Transcription:
-        return self.stt.transcribe(audio_path)
+        with self.stt_lock:
+            return self.stt.transcribe(audio_path)
+
+    def set_language(self, requested_language: str) -> ToolResult:
+        ok, content = set_language_state(self.cfg, requested_language)
+        if ok:
+            with self.stt_lock:
+                self.stt = build_stt(self.cfg.stt)
+            self.tts = build_tts(self.cfg)
+        return ToolResult(name="set_language", ok=ok, content=content)
 
     def handle_text(self, text: str, speak: bool = True) -> TurnResult:
         started_at = time.perf_counter()
@@ -86,9 +104,9 @@ class VoiceAgent:
         if not text:
             return TurnResult(user_text="", assistant_text="", tool_results=[])
 
-        direct_tool_calls = _route_direct_tools(text)
+        direct_tool_calls = _route_direct_tools(text, self.cfg)
         if direct_tool_calls and self.cfg.tools.enabled:
-            tool_results = [self.tools.execute(call) for call in direct_tool_calls]
+            tool_results = self._execute_tool_calls(direct_tool_calls)
             direct_answer = _format_direct_tool_answer(tool_results)
             if direct_answer:
                 self._remember(text, direct_answer)
@@ -103,14 +121,7 @@ class VoiceAgent:
                     self.tts.speak(direct_answer)
                 return result
             messages = self._messages_for_turn(text)
-            messages.append(
-                LLMMessage(
-                    role="user",
-                    content="Tool results: "
-                    + json.dumps([asdict(result) for result in tool_results])
-                    + "\nNow answer the user briefly in natural language.",
-                )
-            )
+            messages.append(_tool_results_message(tool_results, self.cfg))
             final_text = self.llm.complete(messages).content.strip()
             self._remember(text, final_text)
             result = TurnResult(
@@ -131,19 +142,15 @@ class VoiceAgent:
         final_text = first.content.strip()
 
         if tool_calls:
-            for call in tool_calls:
-                tool_results.append(self.tools.execute(call))
-            messages.append(LLMMessage(role="assistant", content=first.content))
-            messages.append(
-                LLMMessage(
-                    role="user",
-                    content="Tool results: "
-                    + json.dumps([asdict(result) for result in tool_results])
-                    + "\nNow answer the user briefly in natural language.",
-                )
-            )
-            second = self.llm.complete(messages)
-            final_text = second.content.strip()
+            tool_results = self._execute_tool_calls(tool_calls)
+            direct_answer = _format_direct_tool_answer(tool_results)
+            if direct_answer:
+                final_text = direct_answer
+            else:
+                messages.append(LLMMessage(role="assistant", content=first.content))
+                messages.append(_tool_results_message(tool_results, self.cfg))
+                second = self.llm.complete(messages)
+                final_text = second.content.strip()
 
         self._remember(text, final_text)
         result = TurnResult(
@@ -168,9 +175,9 @@ class VoiceAgent:
         if not text:
             return TurnResult(user_text="", assistant_text="", tool_results=[])
 
-        direct_tool_calls = _route_direct_tools(text)
+        direct_tool_calls = _route_direct_tools(text, self.cfg)
         if direct_tool_calls and self.cfg.tools.enabled:
-            tool_results = [self.tools.execute(call) for call in direct_tool_calls]
+            tool_results = self._execute_tool_calls(direct_tool_calls)
             direct_answer = _format_direct_tool_answer(tool_results)
             if direct_answer:
                 if on_token:
@@ -179,7 +186,7 @@ class VoiceAgent:
                     self.tts.speak(direct_answer)
                 return self._finish_turn(text, direct_answer, tool_results, started_at)
             messages = self._messages_for_turn(text)
-            messages.append(_tool_results_message(tool_results))
+            messages.append(_tool_results_message(tool_results, self.cfg))
             final_text = self._stream_final_answer(messages, speak, on_token)
             return self._finish_turn(text, final_text, tool_results, started_at)
 
@@ -190,18 +197,39 @@ class VoiceAgent:
         final_text = first_text
 
         if tool_calls:
-            for call in tool_calls:
-                tool_results.append(self.tools.execute(call))
-            messages.append(LLMMessage(role="assistant", content=first_text))
-            messages.append(_tool_results_message(tool_results))
-            final_text = self._stream_final_answer(messages, speak, on_token)
+            tool_results = self._execute_tool_calls(tool_calls)
+            direct_answer = _format_direct_tool_answer(tool_results)
+            if direct_answer:
+                if on_token and not _is_language_switch_tool_result(tool_results):
+                    on_token(direct_answer)
+                if speak:
+                    self.tts.speak(direct_answer)
+                final_text = direct_answer
+            else:
+                messages.append(LLMMessage(role="assistant", content=first_text))
+                messages.append(_tool_results_message(tool_results, self.cfg))
+                final_text = self._stream_final_answer(messages, speak, on_token)
 
         return self._finish_turn(text, final_text, tool_results, started_at)
 
     def _messages_for_turn(self, text: str) -> List[LLMMessage]:
         system = build_system_prompt(self.cfg, self.tools)
         trimmed_history = self.history[-self.cfg.llm.context_turns * 2 :]
-        return [LLMMessage("system", system)] + trimmed_history + [LLMMessage("user", text)]
+        return (
+            [LLMMessage("system", system)]
+            + trimmed_history
+            + [LLMMessage("user", text)]
+        )
+
+    def _execute_tool_calls(self, calls: List[ToolCall]) -> List[ToolResult]:
+        results: List[ToolResult] = []
+        for call in calls:
+            if call.name == "set_language":
+                language = str(call.arguments.get("language", ""))
+                results.append(self.set_language(language))
+            else:
+                results.append(self.tools.execute(call))
+        return results
 
     def _remember(self, user_text: str, assistant_text: str) -> None:
         self.history.append(LLMMessage("user", user_text))
@@ -299,12 +327,13 @@ class VoiceAgent:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=True) + "\n")
 
-def _tool_results_message(tool_results: List[ToolResult]) -> LLMMessage:
+def _tool_results_message(tool_results: List[ToolResult], cfg: Config) -> LLMMessage:
     return LLMMessage(
         role="user",
         content="Tool results: "
         + json.dumps([asdict(result) for result in tool_results])
-        + "\nNow answer the user in natural language. Match the requested length.",
+        + "\nNow answer the user in natural language. Match the requested length."
+        + f"\nCurrent reply language: {cfg.agent.default_response_language}.",
     )
 
 
@@ -324,9 +353,13 @@ def _count_words(text: str) -> int:
     return len(re.findall(r"\b[\w']+\b", text))
 
 
-def _route_direct_tools(text: str) -> List[ToolCall]:
+def _route_direct_tools(text: str, cfg: Config) -> List[ToolCall]:
     lowered = text.lower()
     calls: List[ToolCall] = []
+    language = match_language_switch(cfg, text)
+    if language:
+        calls.append(ToolCall("set_language", {"language": language}))
+        return calls
     memory = _extract_memory_text(text)
     if memory:
         calls.append(ToolCall("remember", {"memory": memory}))
@@ -352,6 +385,10 @@ def _format_direct_tool_answer(tool_results: List[ToolResult]) -> str:
     result = tool_results[0]
     content = result.content
     if result.name != "calculator":
+        if result.name == "set_language":
+            if result.ok:
+                return str(content.get("confirmation") or "Language switched.")
+            return f"I could not switch language: {content.get('error', 'unknown error')}."
         if result.name == "remember":
             if result.ok:
                 return "I'll remember that."
@@ -360,6 +397,14 @@ def _format_direct_tool_answer(tool_results: List[ToolResult]) -> str:
     if not result.ok:
         return f"I could not calculate that: {content.get('error', 'unknown error')}."
     return f"The result is {content.get('result_display', content.get('result'))}."
+
+
+def _is_language_switch_tool_result(tool_results: List[ToolResult]) -> bool:
+    return (
+        len(tool_results) == 1
+        and tool_results[0].name == "set_language"
+        and tool_results[0].ok
+    )
 
 
 def _extract_memory_text(text: str) -> str:

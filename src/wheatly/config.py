@@ -46,6 +46,72 @@ class STTConfig:
 
 
 @dataclass
+class LanguageOptionConfig:
+    label: str = "English"
+    response_language: str = "English"
+    stt_model: Optional[str] = "small.en"
+    stt_language: Optional[str] = "en"
+    tts_backend: Optional[str] = None
+    tts_voice: Optional[str] = "Daniel"
+    tts_piper_model: Optional[str] = "models/piper/en_GB-alan-medium.onnx"
+    tts_piper_config: Optional[str] = None
+    tts_piper_speaker: Optional[int] = None
+    confirmation: str = "Hi"
+    switch_phrases: List[str] = field(default_factory=list)
+
+
+def _default_language_options() -> Dict[str, LanguageOptionConfig]:
+    return {
+        "en": LanguageOptionConfig(
+            label="English",
+            response_language="English",
+            stt_model="small.en",
+            stt_language="en",
+            tts_voice="Daniel",
+            tts_piper_model="models/piper/en_GB-alan-medium.onnx",
+            confirmation="Hi",
+            switch_phrases=[
+                "switch to english",
+                "speak english",
+                "talk in english",
+                "use english",
+                "prepni na anglictinu",
+                "hovor po anglicky",
+            ],
+        ),
+        "sk": LanguageOptionConfig(
+            label="Slovak",
+            response_language="Slovak",
+            stt_model="medium",
+            stt_language="sk",
+            tts_voice="Lili",
+            tts_piper_model="models/piper/sk_SK-lili-medium.onnx",
+            confirmation="Ahoj",
+            switch_phrases=[
+                "switch to slovak",
+                "speak slovak",
+                "talk in slovak",
+                "use slovak",
+                "hovor po slovensky",
+                "prepni na slovencinu",
+                "prejdi na slovencinu",
+            ],
+        ),
+    }
+
+
+@dataclass
+class LanguageConfig:
+    enabled: bool = False
+    default: str = "en"
+    persist: bool = True
+    state_file: str = "language.json"
+    languages: Dict[str, LanguageOptionConfig] = field(
+        default_factory=_default_language_options
+    )
+
+
+@dataclass
 class RemoteLLMConfig:
     enabled: bool = False
     backend: str = "openai_compat"
@@ -136,6 +202,7 @@ class Config:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: STTConfig = field(default_factory=STTConfig)
+    language: LanguageConfig = field(default_factory=LanguageConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
     tools: ToolConfig = field(default_factory=ToolConfig)
@@ -199,6 +266,7 @@ def _apply_dict(cfg: Config, raw: Dict[str, Any]) -> Config:
         runtime=RuntimeConfig(**data["runtime"]),
         audio=AudioConfig(**data["audio"]),
         stt=STTConfig(**data["stt"]),
+        language=_language_config_from_data(data["language"]),
         llm=LLMConfig(
             **{
                 **data["llm"],
@@ -214,6 +282,20 @@ def _apply_dict(cfg: Config, raw: Dict[str, Any]) -> Config:
         tools=ToolConfig(**data["tools"]),
         prompts=PromptConfig(**data["prompts"]),
         agent=AgentConfig(**data["agent"]),
+    )
+
+
+def _language_config_from_data(data: Dict[str, Any]) -> LanguageConfig:
+    languages = {
+        str(code): LanguageOptionConfig(**option)
+        for code, option in data.get("languages", {}).items()
+    }
+    return LanguageConfig(
+        enabled=data.get("enabled", False),
+        default=data.get("default", "en"),
+        persist=data.get("persist", True),
+        state_file=data.get("state_file", "language.json"),
+        languages=languages,
     )
 
 

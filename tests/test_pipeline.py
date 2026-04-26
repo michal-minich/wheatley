@@ -51,6 +51,23 @@ class PipelineTests(unittest.TestCase):
             self.assertIn("I'll remember", result.assistant_text)
             self.assertIn("I like quick answers", Path(cfg.prompts.memory_path).read_text())
 
+    def test_explicit_language_switch_updates_runtime_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Config()
+            cfg.runtime.data_dir = tmp
+            cfg.runtime.state_dir = str(Path(tmp) / "state")
+            cfg.runtime.turn_log = str(Path(tmp) / "turns.jsonl")
+            cfg.language.enabled = True
+            cfg.ensure_dirs()
+            agent = VoiceAgent(cfg, tts=SilentTTS())
+            result = agent.handle_text("switch to Slovak", speak=False)
+            self.assertEqual(result.tool_results[0].name, "set_language")
+            self.assertEqual(cfg.runtime.default_language, "sk")
+            self.assertEqual(cfg.agent.default_response_language, "Slovak")
+            self.assertEqual(cfg.stt.model, "medium")
+            self.assertEqual(cfg.stt.language, "sk")
+            self.assertEqual(result.assistant_text, "Ahoj")
+
     def test_prompt_injects_user_instructions_and_memory(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = Config()

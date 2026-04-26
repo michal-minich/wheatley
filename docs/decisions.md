@@ -168,6 +168,7 @@ Active tools:
 - `set_eye_expression`
 - `calculator`
 - `remember`
+- `set_language`
 - `take_photo` only if configured
 - `run_safe_cli_tool` only for explicitly allowed commands
 
@@ -196,3 +197,20 @@ Reasoning:
 - Config, prompts, tool wording, voice settings and memory travel together.
 - Examples stay under `examples/profiles/` so they do not compete with the active profile.
 - Main configs use `.jsonc` because comments belong next to settings.
+
+## D14: Explicit Language Switching
+
+Decision: use explicit English/Slovak switching instead of automatic language detection.
+
+Reasoning:
+
+- Small STT and LLM models behave better with a strong language hint.
+- English mode can keep `small.en` for latency.
+- Slovak mode uses multilingual Whisper `medium` with `sk` language hint for quality.
+- The LLM model stays the same; only prompt hint, STT model/language, and TTS voice change.
+
+Current behavior:
+
+- `switch to Slovak`, `speak Slovak`, `hovor po slovensky`, and `prepni na slovencinu` switch to Slovak.
+- `switch to English`, `speak English`, `hovor po anglicky`, and `prepni na anglictinu` switch to English.
+- Switching prints a blue `language>` line and speaks only `Ahoj` or `Hi`.

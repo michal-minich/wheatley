@@ -7,34 +7,17 @@ from typing import Any, Dict
 
 from wheatly.config import Config
 from wheatly.jsonc import loads_jsonc
+from wheatly.language import active_language_hint, language_status_payload
 from wheatly.tools.registry import ToolRegistry
-
-
-DEFAULT_SYSTEM_PROMPT = """You are {{AGENT_NAME}}, a {{AGENT_PERSONA}}.
-Default response language: {{DEFAULT_RESPONSE_LANGUAGE}}.
-
-Voice interaction rules:
-- Be concise by default for ordinary chat.
-- If the user asks for a story, poem, list, plan, detailed explanation, or a specific length, follow that request instead of forcing a short answer.
-- Do not emit hidden reasoning, think tags, or long preambles.
-
-Tool calling rules:
-- If a tool is needed, reply only with JSON in this shape: {"tool_calls":[{"name":"calculator","arguments":{"expression":"sqrt(10)"}}]}.
-- After tool results are provided, answer naturally and match the requested length.
-"""
-
-DEFAULT_USER_INSTRUCTIONS = """Use natural spoken English unless the user switches language.
-Prefer short answers in voice mode, but do not shorten requested stories, lists, plans, or explanations.
-"""
 
 
 def build_system_prompt(cfg: Config, tools: ToolRegistry) -> str:
     system = _render_template(
-        _read_text(Path(cfg.prompts.system_path), DEFAULT_SYSTEM_PROMPT),
+        _read_text(Path(cfg.prompts.system_path)),
         cfg,
     )
-    user = _read_text(Path(cfg.prompts.user_path), DEFAULT_USER_INSTRUCTIONS).strip()
-    memory = _read_text(Path(cfg.prompts.memory_path), "").strip()
+    user = _read_text(Path(cfg.prompts.user_path)).strip()
+    memory = _read_text(Path(cfg.prompts.memory_path)).strip()
     specs = [
         {
             "name": spec.name,
@@ -114,20 +97,29 @@ def _load_markdown_tool_overrides(text: str) -> Dict[str, Dict[str, str]]:
     return overrides
 
 
-def _read_text(path: Path, default: str) -> str:
+def _read_text(path: Path) -> str:
     try:
         if path.exists():
             return path.read_text(encoding="utf-8")
     except OSError:
         pass
-    return default
+    return ""
 
 
 def _render_template(text: str, cfg: Config) -> str:
+    language = language_status_payload(cfg)
     replacements = {
         "{{AGENT_NAME}}": cfg.agent.name,
         "{{AGENT_PERSONA}}": cfg.agent.persona,
         "{{DEFAULT_RESPONSE_LANGUAGE}}": cfg.agent.default_response_language,
+        "{{ACTIVE_LANGUAGE_HINT}}": active_language_hint(cfg),
+        "{{CURRENT_LANGUAGE_CODE}}": str(language.get("language", "")),
+        "{{CURRENT_LANGUAGE_LABEL}}": str(language.get("label", "")),
+        "{{CURRENT_RESPONSE_LANGUAGE}}": str(language.get("response_language", "")),
+        "{{CURRENT_STT_MODEL}}": str(language.get("stt_model", "")),
+        "{{CURRENT_STT_LANGUAGE}}": str(language.get("stt_language", "")),
+        "{{CURRENT_TTS_VOICE}}": str(language.get("tts_voice", "")),
+        "{{CURRENT_TTS_PIPER_MODEL}}": str(language.get("tts_piper_model", "")),
     }
     for marker, value in replacements.items():
         text = text.replace(marker, value)
