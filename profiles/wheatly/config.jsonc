@@ -39,7 +39,11 @@
     // Use the last live preview transcript as the final user text when it is fresh enough.
     "partial_transcript_use_as_final": true,
     // Maximum age of the last preview transcript at recording end before falling back to full STT.
-    "partial_transcript_final_max_age_seconds": 8.0
+    "partial_transcript_final_max_age_seconds": 8.0,
+    // Play short non-TTS chimes on listening start and stop.
+    "listening_chimes_enabled": true,
+    // Gain for generated listening chimes. Keep under 0.4 to avoid startling peaks.
+    "listening_chime_volume": 0.28
   },
   // Persona identity exposed to prompts.
   "agent": {

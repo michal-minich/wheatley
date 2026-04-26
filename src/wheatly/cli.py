@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from wheatly.audio.chimes import play_listening_chime
 from wheatly.config import load_config
 from wheatly.doctor import diagnostics_json
 from wheatly.language import match_language_switch
@@ -146,10 +147,12 @@ def main(argv: list[str] | None = None) -> int:
             / f"utterance_{int(__import__('time').time())}.wav"
         )
         print(_color("listening...", "green"))
+        play_listening_chime("start", cfg.audio)
         recorded = _record_with_partial_transcript(
             recorder, audio_path, partial_transcriber
         )
         print(_color("stopped listening.", "red"))
+        play_listening_chime("stop", cfg.audio)
         transcription = _transcribe_with_status(agent, recorded, cfg)
         _print_user(transcription.text)
         _handle_text_turn(
@@ -274,11 +277,13 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
                 / f"utterance_{int(time.time())}_{count + 1}.wav"
             )
             print(_color("listening...", "green"))
+            play_listening_chime("start", cfg.audio)
             partial_transcriber = _build_partial_transcriber(agent, cfg)
             recorded = _record_with_partial_transcript(
                 recorder, audio_path, partial_transcriber
             )
             print(_color("stopped listening.", "red"))
+            play_listening_chime("stop", cfg.audio)
             transcription = _transcribe_with_status(agent, recorded, cfg)
             text = transcription.text.strip()
             _print_user(text)

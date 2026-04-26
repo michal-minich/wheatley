@@ -33,6 +33,8 @@ class AudioConfig:
     partial_transcript_min_audio_seconds: float = 1.2
     partial_transcript_use_as_final: bool = True
     partial_transcript_final_max_age_seconds: float = 8.0
+    listening_chimes_enabled: bool = True
+    listening_chime_volume: float = 0.28
 
 
 @dataclass

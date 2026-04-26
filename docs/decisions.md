@@ -151,6 +151,7 @@ Current behavior:
 
 - `listening...` is green.
 - `stopped listening.` is red after recording stops.
+- `listening...` plays a rising chime; `stopped listening.` plays a falling chime.
 - Partial microphone transcript is shown as a rewriting yellow `you~>` preview when enabled.
 - Normal answer text streams to terminal.
 - TTS begins after the first usable phrase or chunk.
