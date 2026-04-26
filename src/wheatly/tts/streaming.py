@@ -22,6 +22,8 @@ class StreamingSpeaker:
         feedback_min_words: int = 8,
         max_initial_wait_seconds: float = 2.0,
         on_spoken: Optional[Callable[[str, float], None]] = None,
+        stop_event: Optional[threading.Event] = None,
+        pause_event: Optional[threading.Event] = None,
     ):
         self.tts = tts
         self.enabled = enabled
@@ -31,6 +33,8 @@ class StreamingSpeaker:
         self.feedback_min_words = feedback_min_words
         self.max_initial_wait_seconds = max_initial_wait_seconds
         self.on_spoken = on_spoken
+        self.stop_event = stop_event
+        self.pause_event = pause_event
         self._buffer = ""
         self._queue: queue.Queue[Optional[str]] = queue.Queue()
         self._worker: Optional[threading.Thread] = None
@@ -48,7 +52,7 @@ class StreamingSpeaker:
         self.finish()
 
     def feed(self, text: str) -> None:
-        if not self.enabled or not text:
+        if not self.enabled or not text or self._stopped():
             return
         if self._first_buffered_at is None:
             self._first_buffered_at = time.perf_counter()
@@ -63,10 +67,11 @@ class StreamingSpeaker:
     def finish(self) -> None:
         if not self.enabled:
             return
-        remaining = self._pop_segment(final=True)
-        if remaining:
-            self._segments_queued += 1
-            self._queue.put(remaining)
+        if not self._stopped():
+            remaining = self._pop_segment(final=True)
+            if remaining:
+                self._segments_queued += 1
+                self._queue.put(remaining)
         self._queue.put(None)
         if self._worker:
             self._worker.join()
@@ -76,11 +81,16 @@ class StreamingSpeaker:
     def _run(self) -> None:
         while True:
             item = self._queue.get()
-            if item is None:
+            if item is None or self._stopped():
                 return
             try:
+                self._wait_if_paused()
+                if self._stopped():
+                    return
                 started_at = time.perf_counter()
                 self.tts.speak(item)
+                if self._stopped():
+                    return
                 if self.on_spoken:
                     self.on_spoken(item, time.perf_counter() - started_at)
             except BaseException as exc:  # Preserve worker errors for caller.
@@ -133,6 +143,15 @@ class StreamingSpeaker:
             return segment
 
         return ""
+
+    def _stopped(self) -> bool:
+        return self.stop_event is not None and self.stop_event.is_set()
+
+    def _wait_if_paused(self) -> None:
+        if self.pause_event is None:
+            return
+        while self.pause_event.is_set() and not self._stopped():
+            time.sleep(0.03)
 
 
 def _word_boundary_index(text: str, word_count: int) -> int:

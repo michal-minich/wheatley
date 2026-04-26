@@ -1,4 +1,5 @@
 import unittest
+import threading
 
 from wheatly.tts.base import SpeechResult, TTSBackend
 from wheatly.tts.streaming import StreamingSpeaker
@@ -43,6 +44,21 @@ class StreamingSpeakerTests(unittest.TestCase):
             speaker.feed("one two three four five six")
 
         self.assertEqual(tts.spoken[0], "one two three four")
+
+    def test_stop_event_prevents_queued_speech(self):
+        tts = RecordingTTS()
+        stop_event = threading.Event()
+        stop_event.set()
+        with StreamingSpeaker(
+            tts,
+            enabled=True,
+            min_words=1,
+            max_words=2,
+            stop_event=stop_event,
+        ) as speaker:
+            speaker.feed("one two three four")
+
+        self.assertEqual(tts.spoken, [])
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from wheatly.audio.interrupt import SpeechInterruptMonitor
 from wheatly.config import Config
 from wheatly.language import (
     apply_configured_language,
@@ -131,7 +132,7 @@ class VoiceAgent:
                 )
                 self._log_turn(result)
                 if speak:
-                    self.tts.speak(direct_answer)
+                    self._speak_text(direct_answer)
                 return result
             messages = self._messages_for_turn(text)
             messages.append(_tool_results_message(tool_results, self.cfg))
@@ -145,7 +146,7 @@ class VoiceAgent:
             )
             self._log_turn(result)
             if speak and final_text:
-                self.tts.speak(final_text)
+                self._speak_text(final_text)
             return result
 
         messages = self._messages_for_turn(text)
@@ -174,7 +175,7 @@ class VoiceAgent:
         )
         self._log_turn(result)
         if speak and final_text:
-            self.tts.speak(final_text)
+            self._speak_text(final_text)
         return result
 
     def handle_text_stream(
@@ -196,7 +197,7 @@ class VoiceAgent:
                 if on_token:
                     on_token(direct_answer)
                 if speak:
-                    self.tts.speak(direct_answer)
+                    self._speak_text(direct_answer)
                 return self._finish_turn(text, direct_answer, tool_results, started_at)
             messages = self._messages_for_turn(text)
             messages.append(_tool_results_message(tool_results, self.cfg))
@@ -216,7 +217,7 @@ class VoiceAgent:
                 if on_token and not _is_language_switch_tool_result(tool_results):
                     on_token(direct_answer)
                 if speak:
-                    self.tts.speak(direct_answer)
+                    self._speak_text(direct_answer)
                 final_text = direct_answer
             else:
                 messages.append(LLMMessage(role="assistant", content=first_text))
@@ -282,37 +283,57 @@ class VoiceAgent:
             adaptive=self.cfg.tts.adaptive_streaming,
         )
 
-        with StreamingSpeaker(
-            self.tts,
-            enabled=speak and self.cfg.tts.stream_speech,
-            min_words=self.cfg.tts.stream_min_words,
-            max_words=self.cfg.tts.stream_max_words,
-            initial_min_words=initial_words,
-            feedback_min_words=self.cfg.tts.stream_feedback_min_words,
-            max_initial_wait_seconds=self.cfg.tts.stream_max_initial_wait_seconds,
-            on_spoken=self._record_spoken_segment,
-        ) as speaker:
-            for chunk in self.llm.stream_complete(messages):
-                if first_chunk_at is None:
-                    first_chunk_at = time.perf_counter()
-                chunks.append(chunk)
-                if not visible_started:
-                    pending += chunk
-                    stripped = pending.lstrip()
-                    if not stripped:
+        interrupt_event = threading.Event()
+        monitor_enabled = speak and self._speech_interrupt_available()
+        with SpeechInterruptMonitor(
+            self.cfg.audio,
+            self.transcribe,
+            interrupt_event,
+            enabled=monitor_enabled,
+        ) as interrupt_monitor:
+            with StreamingSpeaker(
+                self.tts,
+                enabled=speak and self.cfg.tts.stream_speech,
+                min_words=self.cfg.tts.stream_min_words,
+                max_words=self.cfg.tts.stream_max_words,
+                initial_min_words=initial_words,
+                feedback_min_words=self.cfg.tts.stream_feedback_min_words,
+                max_initial_wait_seconds=self.cfg.tts.stream_max_initial_wait_seconds,
+                on_spoken=self._record_spoken_segment,
+                stop_event=interrupt_event,
+                pause_event=interrupt_monitor.pause_event,
+            ) as speaker:
+                for chunk in self.llm.stream_complete(messages):
+                    if interrupt_event.is_set():
+                        break
+                    if first_chunk_at is None:
+                        first_chunk_at = time.perf_counter()
+                    chunks.append(chunk)
+                    if not visible_started:
+                        pending += chunk
+                        stripped = pending.lstrip()
+                        if not stripped:
+                            continue
+                        if (
+                            stripped.startswith("{")
+                            or stripped.startswith("[")
+                            or stripped.startswith("```")
+                        ):
+                            hold_for_possible_tool_json = True
+                            continue
+                        visible_started = True
+                        _emit_token(pending, on_token, speaker)
+                        pending = ""
                         continue
-                    if stripped.startswith("{") or stripped.startswith("[") or stripped.startswith("```"):
-                        hold_for_possible_tool_json = True
-                        continue
-                    visible_started = True
-                    _emit_token(pending, on_token, speaker)
-                    pending = ""
-                    continue
-                _emit_token(chunk, on_token, speaker)
+                    _emit_token(chunk, on_token, speaker)
 
-            final_text = "".join(chunks).strip()
-            if hold_for_possible_tool_json and not parse_tool_calls(final_text):
-                _emit_token(pending, on_token, speaker)
+                final_text = "".join(chunks).strip()
+                if (
+                    hold_for_possible_tool_json
+                    and not interrupt_event.is_set()
+                    and not parse_tool_calls(final_text)
+                ):
+                    _emit_token(pending, on_token, speaker)
 
         stream_ended_at = time.perf_counter()
         self.latency_stats.record_llm(
@@ -326,9 +347,31 @@ class VoiceAgent:
             and not (self.cfg.tools.enabled and parse_tool_calls(final_text))
         ):
             started_at = time.perf_counter()
-            self.tts.speak(final_text)
+            self._speak_text(final_text)
             self._record_spoken_segment(final_text, time.perf_counter() - started_at)
         return final_text
+
+    def _speak_text(self, text: str) -> bool:
+        if not text:
+            return False
+        interrupt_event = threading.Event()
+        monitor_enabled = self._speech_interrupt_available()
+        with SpeechInterruptMonitor(
+            self.cfg.audio,
+            self.transcribe,
+            interrupt_event,
+            enabled=monitor_enabled,
+        ):
+            self.tts.speak(text)
+        return interrupt_event.is_set()
+
+    def _speech_interrupt_available(self) -> bool:
+        return (
+            self.cfg.tts.enabled
+            and self.cfg.tts.playback
+            and self.cfg.audio.speech_interrupt_enabled
+            and self.cfg.stt.backend.lower().replace("-", "_") != "keyboard"
+        )
 
     def _record_spoken_segment(self, segment: str, duration_seconds: float) -> None:
         self.latency_stats.record_tts(_count_words(segment), duration_seconds)

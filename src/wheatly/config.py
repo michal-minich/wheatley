@@ -35,6 +35,15 @@ class AudioConfig:
     partial_transcript_final_max_age_seconds: float = 8.0
     listening_chimes_enabled: bool = True
     listening_chime_volume: float = 0.28
+    speech_interrupt_enabled: bool = True
+    speech_interrupt_phrase: str = "stop"
+    speech_interrupt_min_rms: float = 0.055
+    speech_interrupt_vad_multiplier: float = 3.0
+    speech_interrupt_baseline_multiplier: float = 2.4
+    speech_interrupt_grace_seconds: float = 0.6
+    speech_interrupt_pre_roll_seconds: float = 0.35
+    speech_interrupt_record_seconds: float = 0.9
+    speech_interrupt_max_words: int = 4
 
 
 @dataclass

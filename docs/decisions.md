@@ -155,6 +155,7 @@ Current behavior:
 - Partial microphone transcript is shown as a rewriting yellow `you~>` preview when enabled.
 - Normal answer text streams to terminal.
 - TTS begins after the first usable phrase or chunk.
+- During TTS playback, a separate high-threshold interrupt monitor can stop speech when the user loudly says `stop`.
 - The first TTS chunk is adaptive, based on persisted LLM/TTS speed stats.
 - The first chunk has its own lower word threshold so startup can be quicker than mid-answer chunking.
 - `stream_max_initial_wait_seconds` prevents slow hardware from waiting too long before audible feedback.

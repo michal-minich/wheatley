@@ -9,7 +9,7 @@ import wave
 from pathlib import Path
 
 from wheatly.audio.filter import apply_voice_filter
-from wheatly.audio.playback import play_audio
+from wheatly.audio.playback import play_audio, run_playback_command
 from wheatly.config import Config
 from wheatly.tts.base import SpeechResult, TTSBackend
 
@@ -28,8 +28,7 @@ class MacOSSayTTS(TTSBackend):
         if not self.cfg.tts.enabled:
             return SpeechResult(audio_path=None, spoken=False)
         command = ["say", "-v", self.cfg.tts.voice, text]
-        completed = subprocess.run(command, shell=False, check=False)
-        return SpeechResult(audio_path=None, spoken=completed.returncode == 0)
+        return SpeechResult(audio_path=None, spoken=run_playback_command(command))
 
 
 class PiperTTS(TTSBackend):
@@ -76,9 +75,10 @@ class PiperTTS(TTSBackend):
             raise RuntimeError(completed.stderr.strip() or "piper failed")
 
         final_path = _postprocess_audio(raw_path, output_dir, base, self.cfg)
+        spoken = False
         if self.cfg.tts.playback:
-            play_audio(final_path, self.cfg.tts.playback_command)
-        return SpeechResult(audio_path=final_path, spoken=self.cfg.tts.playback)
+            spoken = play_audio(final_path, self.cfg.tts.playback_command)
+        return SpeechResult(audio_path=final_path, spoken=spoken)
 
 
 class EdgeTTSTTS(TTSBackend):
@@ -101,9 +101,10 @@ class EdgeTTSTTS(TTSBackend):
             volume=self.cfg.tts.edge_volume,
         )
         final_path = _postprocess_audio(raw_path, output_dir, base, self.cfg)
+        spoken = False
         if self.cfg.tts.playback:
-            play_audio(final_path, self.cfg.tts.playback_command)
-        return SpeechResult(audio_path=final_path, spoken=self.cfg.tts.playback)
+            spoken = play_audio(final_path, self.cfg.tts.playback_command)
+        return SpeechResult(audio_path=final_path, spoken=spoken)
 
 
 class ExternalCommandTTS(TTSBackend):
@@ -133,9 +134,10 @@ class ExternalCommandTTS(TTSBackend):
         final_path = apply_voice_filter(
             raw_path, output_dir / f"{base}.wheatley.wav", self.cfg.tts.filter
         )
+        spoken = False
         if self.cfg.tts.playback:
-            play_audio(final_path, self.cfg.tts.playback_command)
-        return SpeechResult(audio_path=final_path, spoken=self.cfg.tts.playback)
+            spoken = play_audio(final_path, self.cfg.tts.playback_command)
+        return SpeechResult(audio_path=final_path, spoken=spoken)
 
 
 def build_tts(cfg: Config) -> TTSBackend:

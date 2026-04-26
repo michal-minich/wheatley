@@ -43,7 +43,25 @@
     // Play short non-TTS chimes on listening start and stop.
     "listening_chimes_enabled": true,
     // Gain for generated listening chimes. Keep under 0.4 to avoid startling peaks.
-    "listening_chime_volume": 0.28
+    "listening_chime_volume": 0.28,
+    // While TTS is speaking, listen for a loud stop word to interrupt playback.
+    "speech_interrupt_enabled": true,
+    // Voice command that stops current speech output.
+    "speech_interrupt_phrase": "stop",
+    // Absolute RMS floor for interrupt candidates. This is intentionally above normal VAD.
+    "speech_interrupt_min_rms": 0.055,
+    // Candidate must also exceed normal VAD by this factor.
+    "speech_interrupt_vad_multiplier": 3.0,
+    // Candidate must be louder than the current speaker bleed by this factor.
+    "speech_interrupt_baseline_multiplier": 2.4,
+    // Ignore the initial playback onset and learn speaker bleed before accepting interrupts.
+    "speech_interrupt_grace_seconds": 0.6,
+    // Audio kept before the loud trigger so the beginning of "stop" is not clipped.
+    "speech_interrupt_pre_roll_seconds": 0.35,
+    // Short verification clip length sent through STT after the trigger.
+    "speech_interrupt_record_seconds": 0.9,
+    // Ignore long transcripts so normal assistant speech containing "stop" is less likely to match.
+    "speech_interrupt_max_words": 4
   },
   // Persona identity exposed to prompts.
   "agent": {
