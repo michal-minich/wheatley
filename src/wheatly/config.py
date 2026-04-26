@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import json
 import os
 import platform
 import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from wheatly.jsonc import load_jsonc
 
 
 @dataclass
@@ -94,16 +95,15 @@ class TTSConfig:
 class ToolConfig:
     enabled: bool = True
     allowed_commands: Dict[str, List[str]] = field(default_factory=dict)
-    local_search_roots: List[str] = field(default_factory=lambda: ["docs", "notes"])
     photo_command: Optional[List[str]] = None
 
 
 @dataclass
 class PromptConfig:
-    system_path: str = "prompts/system.md"
-    user_path: str = "prompts/user.md"
-    tools_path: str = "prompts/tools.json"
-    memory_path: str = "memory/wheatly.md"
+    system_path: str = "profiles/wheatly/system.md"
+    user_path: str = "profiles/wheatly/user.md"
+    tools_path: str = "profiles/wheatly/tools.jsonc"
+    memory_path: str = "profiles/wheatly/memory.md"
 
 
 @dataclass
@@ -111,7 +111,6 @@ class AgentConfig:
     name: str = "Wheatly"
     persona: str = "compact, fast, slightly nervous, helpful robot"
     default_response_language: str = "English"
-    max_tool_rounds: int = 1
 
 
 @dataclass
@@ -152,20 +151,27 @@ class Config:
         return asdict(self)
 
 
-def load_config(path: Optional[str] = None) -> Config:
+def load_config(path: Optional[str] = None, profile: Optional[str] = None) -> Config:
     cfg = Config()
     config_path = path or os.getenv("WHEATLY_CONFIG")
     if not config_path:
-        default_local = Path("configs/wheatly.local.json")
-        config_path = str(default_local) if default_local.exists() else None
+        profile_name = profile or os.getenv("WHEATLY_PROFILE", "wheatly")
+        profile_config = profile_config_path(profile_name)
+        if profile_config.exists():
+            config_path = str(profile_config)
 
     if config_path:
-        with open(config_path, "r", encoding="utf-8") as handle:
-            raw = json.load(handle)
+        config_file = Path(config_path)
+        raw = load_jsonc(config_file)
         cfg = _apply_dict(cfg, raw)
+        _resolve_profile_paths(cfg, config_file.parent)
 
     cfg.ensure_dirs()
     return cfg
+
+
+def profile_config_path(profile: str) -> Path:
+    return Path("profiles") / profile / "config.jsonc"
 
 
 def _apply_dict(cfg: Config, raw: Dict[str, Any]) -> Config:
@@ -194,3 +200,19 @@ def _deep_update(base: Dict[str, Any], override: Dict[str, Any]) -> None:
             _deep_update(base[key], value)
         else:
             base[key] = value
+
+
+def _resolve_profile_paths(cfg: Config, base_dir: Path) -> None:
+    cfg.prompts.system_path = _resolve_relative(cfg.prompts.system_path, base_dir)
+    cfg.prompts.user_path = _resolve_relative(cfg.prompts.user_path, base_dir)
+    cfg.prompts.tools_path = _resolve_relative(cfg.prompts.tools_path, base_dir)
+    cfg.prompts.memory_path = _resolve_relative(cfg.prompts.memory_path, base_dir)
+
+
+def _resolve_relative(path: str, base_dir: Path) -> str:
+    raw = Path(path)
+    if raw.is_absolute():
+        return str(raw)
+    if len(raw.parts) > 1 and raw.parts[0] in {"profiles", "prompts", "memory"}:
+        return str(raw)
+    return str(base_dir / raw)

@@ -1,32 +1,53 @@
 {
-  "$comment": "Editable tool descriptions and instructions. Tool names and JSON parameter schemas stay in code.",
+  // Editable tool descriptions. Tool names and parameter schemas stay in code.
   "tools": {
+    // Current time/date/uptime.
     "get_time": {
+      // What the model sees as the tool purpose.
       "description": "Return local date, time, timezone and uptime.",
+      // When and how the model should use it.
       "instructions": "Use this when the user asks about the current time, date, timezone, or how long the robot has been running."
     },
+    // Runtime and robot status.
     "robot_status": {
+      // What the model sees as the tool purpose.
       "description": "Return basic runtime, platform and robot state.",
+      // When and how the model should use it.
       "instructions": "Use this when the user asks about battery, status, health, platform, active model, or robot state."
     },
+    // Eye/expression state for the robot body.
     "set_eye_expression": {
+      // What the model sees as the tool purpose.
       "description": "Set the robot eye expression state.",
+      // When and how the model should use it.
       "instructions": "Use this for visible emotion or attention state changes. Prefer thinking while working, happy/excited for positive reactions, confused/worried when uncertain."
     },
+    // Safe local math evaluator.
     "calculator": {
+      // What the model sees as the tool purpose.
       "description": "Evaluate a safe math expression with functions like sqrt, sin, gcd, lcm, round, floor and ceil.",
+      // When and how the model should use it.
       "instructions": "Use this for arithmetic, roots, trigonometry, rounding, gcd/lcm, powers, and similar exact math. Do not do mental math when this tool can answer precisely."
     },
+    // Persistent memory writer.
     "remember": {
+      // What the model sees as the tool purpose.
       "description": "Persist a short user-provided memory for future chats.",
+      // When and how the model should use it.
       "instructions": "Use this when the user says phrases like \"remember this\", \"remember that\", or asks you to remember a preference, fact, name, project detail, or instruction for later."
     },
+    // Camera placeholder.
     "take_photo": {
+      // What the model sees as the tool purpose.
       "description": "Capture a photo if a configured safe camera command exists.",
+      // When and how the model should use it.
       "instructions": "Use this only when a camera command is configured and the user asks to see, look, inspect, or take a photo."
     },
+    // Whitelisted local command runner.
     "run_safe_cli_tool": {
+      // What the model sees as the tool purpose.
       "description": "Run one whitelisted local command by name.",
+      // When and how the model should use it.
       "instructions": "Use this only for commands explicitly listed in configuration. Never request raw shell access."
     }
   }

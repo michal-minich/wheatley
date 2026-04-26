@@ -39,18 +39,19 @@ End-to-end multimodal/audio models remain interesting for later experiments, but
 - `wheatly.audio`: playback and ffmpeg post-filter.
 - `wheatly.tools`: deterministic whitelist tools and parser.
 
-## Instructions And Memory
+## Profiles, Instructions And Memory
 
 The system prompt is assembled by `wheatly.prompting.build_system_prompt()`.
 
-Editable files:
+Each persona is a profile folder under `profiles/<name>/`:
 
-- `prompts/system.md`: main assistant behavior and tool-calling rules.
-- `prompts/user.md`: user preferences and extra always-on instructions.
-- `prompts/tools.json`: editable tool descriptions and tool-specific instructions.
-- `memory/wheatly.md`: persistent memory injected into context.
+- `config.jsonc`: runtime, model, voice, tool and path settings.
+- `system.md`: main assistant behavior and tool-calling rules.
+- `user.md`: user preferences and extra always-on instructions.
+- `tools.jsonc`: editable tool descriptions and tool-specific instructions.
+- `memory.md`: persistent memory injected into context.
 
-Config-driven fields are still available through template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, and `{{DEFAULT_RESPONSE_LANGUAGE}}`.
+Profile text files can use template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, and `{{DEFAULT_RESPONSE_LANGUAGE}}`.
 
 The live transcribed utterance or text is passed as the final user message to `VoiceAgent.handle_text*()`. Persistent memory is not a search tool; it is injected automatically into the system prompt at the start of every turn, including after a new chat reset.
 
@@ -107,8 +108,8 @@ For live voice, optimize in this order:
 
 Runtime outputs are intentionally separated from source:
 
-- `runtime/logs/turns.jsonl`: conversation and tool traces.
-- `runtime/state/eye.json`: current eye expression state.
-- `runtime/audio/`: recorded utterances and generated speech.
+- `runtime/<profile>/logs/turns.jsonl`: conversation and tool traces.
+- `runtime/<profile>/state/eye.json`: current eye expression state.
+- `runtime/<profile>/audio/`: recorded utterances and generated speech.
 
 These files are ignored by git.

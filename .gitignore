@@ -10,6 +10,9 @@ runtime/audio/*.aiff
 runtime/audio/*.mp3
 runtime/logs/*.jsonl
 runtime/state/*.json
-configs/wheatly.local.json
+runtime/**/*.wav
+runtime/**/*.aiff
+runtime/**/*.mp3
+runtime/**/*.jsonl
+runtime/**/*.json
 models/
-

@@ -3,12 +3,22 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-CONFIG="${WHEATLY_CONFIG:-configs/wheatly.local.json}"
+CONFIG="${WHEATLY_CONFIG:-}"
+PROFILE="${WHEATLY_PROFILE:-wheatly}"
 
-if [ ! -f "$CONFIG" ]; then
-  echo "Missing $CONFIG. Copy configs/wheatly.voice-stack.example.json first." >&2
-  echo "  cp configs/wheatly.voice-stack.example.json configs/wheatly.local.json" >&2
-  exit 1
+if [ -n "$CONFIG" ]; then
+  if [ ! -f "$CONFIG" ]; then
+    echo "Missing config: $CONFIG" >&2
+    exit 1
+  fi
+  WHEATLY_ARGS=(--config "$CONFIG")
+else
+  if [ ! -f "profiles/$PROFILE/config.jsonc" ]; then
+    echo "Missing profile: profiles/$PROFILE/config.jsonc" >&2
+    echo "Copy one from examples/profiles/ or set WHEATLY_PROFILE." >&2
+    exit 1
+  fi
+  WHEATLY_ARGS=(--profile "$PROFILE")
 fi
 
 if command -v ollama >/dev/null 2>&1; then
@@ -24,4 +34,4 @@ if [ -f ".venv/bin/activate" ]; then
   . ".venv/bin/activate"
 fi
 
-PYTHONPATH=src python3 -m wheatly --config "$CONFIG" voice "$@"
+PYTHONPATH=src python3 -m wheatly "${WHEATLY_ARGS[@]}" voice "$@"

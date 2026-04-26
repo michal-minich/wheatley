@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from wheatly.config import Config
+from wheatly.jsonc import loads_jsonc
 from wheatly.tools.registry import ToolRegistry
 
 
@@ -57,16 +58,13 @@ def load_tool_overrides(path: str) -> Dict[str, Dict[str, str]]:
     if not file_path.exists():
         return {}
     text = file_path.read_text(encoding="utf-8")
-    if file_path.suffix.lower() == ".json":
+    if file_path.suffix.lower() in {".json", ".jsonc"}:
         return _load_json_tool_overrides(text, file_path)
     return _load_markdown_tool_overrides(text)
 
 
 def _load_json_tool_overrides(text: str, file_path: Path) -> Dict[str, Dict[str, str]]:
-    try:
-        raw = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in {file_path}: {exc}") from exc
+    raw = loads_jsonc(text, str(file_path))
     if not isinstance(raw, dict):
         raise ValueError(f"Invalid tool override file {file_path}: expected a JSON object")
     tools = raw.get("tools", raw)

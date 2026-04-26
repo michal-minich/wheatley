@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from wheatly.config import load_config
+from wheatly.config import load_config, profile_config_path
 from wheatly.doctor import diagnostics_json
 from wheatly.pipeline import VoiceAgent
 from wheatly.runtime_stats import LatencyStats
@@ -19,6 +19,7 @@ from wheatly.tts.backends import build_tts
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="wheatly")
     parser.add_argument("--config", help="Path to JSON config file.")
+    parser.add_argument("--profile", help="Profile folder under profiles/. Defaults to WHEATLY_PROFILE or wheatly.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="Show environment diagnostics.")
@@ -57,7 +58,11 @@ def main(argv: list[str] | None = None) -> int:
     voice.add_argument("--no-stream", action="store_true", help="Disable token streaming.")
 
     args = parser.parse_args(argv)
-    cfg = load_config(args.config)
+    if args.config and args.profile:
+        raise SystemExit("Use either --config or --profile, not both.")
+    if args.profile and not profile_config_path(args.profile).exists():
+        raise SystemExit(f"Missing profile config: {profile_config_path(args.profile)}")
+    cfg = load_config(args.config, profile=args.profile)
 
     if args.command == "doctor":
         print(diagnostics_json(cfg))

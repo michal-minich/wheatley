@@ -178,9 +178,20 @@ Decision: keep assistant instructions, user preferences, tool descriptions, and 
 
 Files:
 
-- `prompts/system.md`
-- `prompts/user.md`
-- `prompts/tools.json`
-- `memory/wheatly.md`
+- `profiles/<name>/system.md`
+- `profiles/<name>/user.md`
+- `profiles/<name>/tools.jsonc`
+- `profiles/<name>/memory.md`
 
-The `remember` tool appends short facts to `memory/wheatly.md`. Memory is injected into the system prompt on every turn, so the model does not need a separate retrieval command to use it. `Start a new chat.` clears conversation history but keeps the editable prompts and persistent memory.
+The `remember` tool appends short facts to the active profile memory. Memory is injected into the system prompt on every turn, so the model does not need a separate retrieval command to use it. `Start a new chat.` clears conversation history but keeps the editable prompts and persistent memory.
+
+## D13: Profile Folder Layout
+
+Decision: group all persona-specific editable files under `profiles/<name>/`.
+
+Reasoning:
+
+- Multiple talking AIs can share the same code.
+- Config, prompts, tool wording, voice settings and memory travel together.
+- Examples stay under `examples/profiles/` so they do not compete with the active profile.
+- Main configs use `.jsonc` because comments belong next to settings.

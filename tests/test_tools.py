@@ -46,7 +46,7 @@ class ToolTests(unittest.TestCase):
     def test_tool_description_override(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = Config()
-            cfg.prompts.tools_path = str(Path(tmp) / "tools.json")
+            cfg.prompts.tools_path = str(Path(tmp) / "tools.jsonc")
             Path(cfg.prompts.tools_path).write_text(
                 '{"tools":{"calculator":{"description":"Custom math tool.",'
                 '"instructions":"Use exact math for everything."}}}',

@@ -1,0 +1,128 @@
+{
+  // Experimental larger-model profile. Copy this folder to profiles/ before use.
+  "runtime": {
+    // Runtime output folder.
+    "data_dir": "runtime/wheatly-qwen35",
+    // Conversation log.
+    "turn_log": "runtime/wheatly-qwen35/logs/turns.jsonl",
+    // State files.
+    "state_dir": "runtime/wheatly-qwen35/state",
+    // Default language.
+    "default_language": "en"
+  },
+  // Persona identity.
+  "agent": {
+    // Assistant name.
+    "name": "Wheatly",
+    // Persona line.
+    "persona": "compact, fast, slightly nervous, helpful robot with a smarter planning mode",
+    // Default response language.
+    "default_response_language": "English"
+  },
+  // Same STT baseline as the active profile.
+  "stt": {
+    // Speech-to-text backend.
+    "backend": "faster_whisper",
+    // faster-whisper model.
+    "model": "small.en",
+    // Recognition language.
+    "language": "en",
+    // Device.
+    "device": "cpu",
+    // Quantization/compute mode.
+    "compute_type": "int8"
+  },
+  // Qwen 35B/3B-class experiment. Exact model tag depends on local runtime.
+  "llm": {
+    // Runtime backend.
+    "backend": "ollama",
+    // Replace with the exact local model tag you install.
+    "model": "qwen3.6:35b-a3b-q4",
+    // Ollama API URL.
+    "base_url": "http://localhost:11434",
+    // API key for OpenAI-compatible runtimes.
+    "api_key": "EMPTY",
+    // Sampling temperature.
+    "temperature": 0.45,
+    // Nucleus sampling cutoff.
+    "top_p": 0.8,
+    // Maximum generated tokens.
+    "max_tokens": 260,
+    // Request timeout.
+    "timeout_seconds": 120.0,
+    // Previous turns to keep.
+    "context_turns": 6,
+    // Keep off for voice latency unless explicitly testing thinking mode.
+    "enable_thinking": false
+  },
+  // Voice settings copied from the active Wheatly profile.
+  "tts": {
+    // TTS backend.
+    "backend": "piper",
+    // Enable speech.
+    "enabled": true,
+    // Voice label.
+    "voice": "Daniel",
+    // Generated audio folder.
+    "output_dir": "runtime/wheatly-qwen35/audio",
+    // Play generated audio.
+    "playback": true,
+    // Piper binary.
+    "piper_binary": ".venv/bin/piper",
+    // Piper voice model.
+    "piper_model": "models/piper/en_GB-alan-medium.onnx",
+    // Lower is faster.
+    "length_scale": 0.66,
+    // Voice variation.
+    "noise_scale": 0.72,
+    // Prosody variation.
+    "noise_w_scale": 0.82,
+    // Sentence silence.
+    "sentence_silence": 0.02,
+    // Playback gain.
+    "volume": 1.05,
+    // Stream chunks early.
+    "stream_speech": true,
+    // Adapt first chunk from stats.
+    "adaptive_streaming": true,
+    // First spoken chunk target.
+    "stream_initial_min_words": 12,
+    // Later spoken chunk target.
+    "stream_min_words": 24,
+    // Chunk cap.
+    "stream_max_words": 60,
+    // Fallback chunk size.
+    "stream_feedback_min_words": 8,
+    // Max startup wait.
+    "stream_max_initial_wait_seconds": 1.2,
+    // Optional post-filter.
+    "filter": {
+      // Disabled by default.
+      "enabled": false,
+      // ffmpeg executable.
+      "ffmpeg_binary": "ffmpeg",
+      // Filter preset.
+      "preset": "wheatley_bright"
+    }
+  },
+  // Tool policy.
+  "tools": {
+    // Enable tools.
+    "enabled": true,
+    // No shell commands by default.
+    "allowed_commands": {},
+    // No camera command by default.
+    "photo_command": null
+  },
+  // Profile-local editable files.
+  "prompts": {
+    // System prompt file.
+    "system_path": "system.md",
+    // User preference file.
+    "user_path": "user.md",
+    // Tool wording file.
+    "tools_path": "tools.jsonc",
+    // Persistent memory file.
+    "memory_path": "memory.md"
+  }
+}

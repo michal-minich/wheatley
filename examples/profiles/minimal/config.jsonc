@@ -1,0 +1,61 @@
+{
+  // Minimal no-model smoke-test profile.
+  "runtime": {
+    // Runtime output folder.
+    "data_dir": "runtime/minimal",
+    // Conversation log.
+    "turn_log": "runtime/minimal/logs/turns.jsonl",
+    // State files.
+    "state_dir": "runtime/minimal/state",
+    // Default language.
+    "default_language": "en"
+  },
+  // Basic persona.
+  "agent": {
+    // Assistant name.
+    "name": "Local Assistant",
+    // Persona line.
+    "persona": "plain, direct local test assistant",
+    // Default response language.
+    "default_response_language": "English"
+  },
+  // Keyboard mode avoids microphone/STT setup.
+  "stt": {
+    // No speech model needed.
+    "backend": "keyboard"
+  },
+  // Echo backend needs no LLM runtime.
+  "llm": {
+    // Deterministic smoke-test backend.
+    "backend": "echo",
+    // Placeholder model name.
+    "model": "echo",
+    // Maximum generated tokens.
+    "max_tokens": 96
+  },
+  // Speech is disabled in this profile.
+  "tts": {
+    // No TTS backend.
+    "backend": "none",
+    // Keep disabled.
+    "enabled": false
+  },
+  // Keep local tools enabled for smoke tests.
+  "tools": {
+    // Enable deterministic tools.
+    "enabled": true,
+    // No shell commands are allowed.
+    "allowed_commands": {}
+  },
+  // Profile-local editable files.
+  "prompts": {
+    // System prompt file.
+    "system_path": "system.md",
+    // User preference file.
+    "user_path": "user.md",
+    // Tool wording file.
+    "tools_path": "tools.jsonc",
+    // Persistent memory file.
+    "memory_path": "memory.md"
+  }
+}
