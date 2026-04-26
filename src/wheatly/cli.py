@@ -263,7 +263,6 @@ def _bench(agent: VoiceAgent, text: str, repeat: int) -> int:
 
 def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -> int:
     recorder = MicrophoneRecorder(cfg.audio)
-    partial_transcriber = _build_partial_transcriber(agent, cfg)
     print("Wheatly voice loop. Say 'stop', 'quit', or press Ctrl-C to exit.")
     count = 0
     while True:
@@ -275,6 +274,7 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
                 / f"utterance_{int(time.time())}_{count + 1}.wav"
             )
             print(_color("listening...", "green"))
+            partial_transcriber = _build_partial_transcriber(agent, cfg)
             recorded = _record_with_partial_transcript(
                 recorder, audio_path, partial_transcriber
             )

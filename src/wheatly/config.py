@@ -23,15 +23,16 @@ class AudioConfig:
     channels: int = 1
     vad_threshold: float = 0.018
     min_speech_seconds: float = 0.45
-    silence_seconds: float = 0.75
-    max_utterance_seconds: float = 14.0
+    silence_seconds: float = 7.0
+    trailing_silence_keep_seconds: float = 0.6
+    max_utterance_seconds: float = 45.0
     max_wait_seconds: float = 30.0
     utterance_dir: str = "runtime/audio"
     partial_transcript_enabled: bool = True
     partial_transcript_interval_seconds: float = 1.1
     partial_transcript_min_audio_seconds: float = 1.2
     partial_transcript_use_as_final: bool = True
-    partial_transcript_final_max_age_seconds: float = 6.0
+    partial_transcript_final_max_age_seconds: float = 8.0
 
 
 @dataclass
@@ -50,6 +51,8 @@ class STTConfig:
 class LanguageOptionConfig:
     label: str = "English"
     response_language: str = "English"
+    audio_partial_transcript_enabled: Optional[bool] = None
+    audio_partial_transcript_use_as_final: Optional[bool] = None
     stt_model: Optional[str] = "small.en"
     stt_language: Optional[str] = "en"
     tts_backend: Optional[str] = None
@@ -67,6 +70,7 @@ class LanguageOptionConfig:
     tts_sentence_silence: Optional[float] = None
     tts_volume: Optional[float] = None
     tts_leading_silence_ms: Optional[int] = None
+    tts_stream_speech: Optional[bool] = None
     tts_stream_initial_min_words: Optional[int] = None
     tts_stream_min_words: Optional[int] = None
     tts_stream_max_words: Optional[int] = None
@@ -75,6 +79,7 @@ class LanguageOptionConfig:
     confirmation: str = "Hi"
     online_model_message: Optional[str] = None
     offline_model_message: Optional[str] = None
+    online_llm_model: Optional[str] = None
     switch_phrases: List[str] = field(default_factory=list)
     switch_language_phrases: List[str] = field(default_factory=list)
 
@@ -84,6 +89,8 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
         "en": LanguageOptionConfig(
             label="English",
             response_language="English",
+            audio_partial_transcript_enabled=True,
+            audio_partial_transcript_use_as_final=True,
             stt_model="small.en",
             stt_language="en",
             tts_backend="piper",
@@ -95,6 +102,7 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             tts_sentence_silence=0.0,
             tts_volume=1.05,
             tts_leading_silence_ms=0,
+            tts_stream_speech=True,
             tts_stream_initial_min_words=5,
             tts_stream_min_words=18,
             tts_stream_max_words=70,
@@ -103,6 +111,7 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             confirmation="Hi",
             online_model_message="using smarter online model",
             offline_model_message="using offline model",
+            online_llm_model="qwen3.6-35b-a3b-ud-mlx",
             switch_phrases=[
                 "switch to english",
                 "speak english",
@@ -120,14 +129,16 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
         "sk": LanguageOptionConfig(
             label="Slovak",
             response_language="Slovak",
-            stt_model="medium",
+            audio_partial_transcript_enabled=False,
+            audio_partial_transcript_use_as_final=False,
+            stt_model="models/whisper/whisper-large-v3-turbo-sk-ct2-int8",
             stt_language="sk",
             tts_backend="edge_tts",
             tts_voice="sk-SK-LukasNeural",
             tts_piper_model="models/piper/sk_SK-lili-medium.onnx",
             tts_edge_voice="sk-SK-LukasNeural",
-            tts_edge_rate="-4%",
-            tts_edge_pitch="+8Hz",
+            tts_edge_rate="+8%",
+            tts_edge_pitch="-14Hz",
             tts_edge_volume="+0%",
             tts_length_scale=0.84,
             tts_noise_scale=0.66,
@@ -135,14 +146,16 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             tts_sentence_silence=0.04,
             tts_volume=1.05,
             tts_leading_silence_ms=80,
-            tts_stream_initial_min_words=1,
-            tts_stream_min_words=10,
-            tts_stream_max_words=60,
-            tts_stream_feedback_min_words=8,
-            tts_stream_max_initial_wait_seconds=0.5,
+            tts_stream_speech=False,
+            tts_stream_initial_min_words=8,
+            tts_stream_min_words=26,
+            tts_stream_max_words=90,
+            tts_stream_feedback_min_words=12,
+            tts_stream_max_initial_wait_seconds=0.8,
             confirmation="Ahoj",
             online_model_message="Používam múdrejší online model.",
             offline_model_message="Používam offline model.",
+            online_llm_model="mlx-community/gemma-4-31b-it",
             switch_phrases=[
                 "switch to slovak",
                 "speak slovak",

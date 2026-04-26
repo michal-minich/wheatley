@@ -41,6 +41,7 @@ class FasterWhisperSTT(STTBackend):
             language=self.cfg.language,
             beam_size=1,
             vad_filter=True,
+            condition_on_previous_text=False,
         )
         text = " ".join(segment.text.strip() for segment in segments).strip()
         return Transcription(
@@ -91,4 +92,3 @@ def _clean_whisper_cpp_output(text: str) -> str:
             continue
         lines.append(line)
     return " ".join(lines).strip()
-

@@ -42,9 +42,27 @@ Slovak currently defaults to Edge TTS `sk-SK-LukasNeural` for a male voice. The 
 
 Per-profile remote model selection is configured in `llm.remote` inside `config.jsonc`. On each new chat the agent probes the configured OpenAI-compatible `/models` endpoint quickly. If reachable, it switches to that backend; otherwise it keeps the local `llm` backend.
 
+The offline model is always `llm.model`. Online LM Studio model names are language-specific under `language.languages.*.online_llm_model`.
+
+## Slovak STT
+
+Slovak STT uses `models/whisper/whisper-large-v3-turbo-sk-ct2-int8`, converted from `NaiveNeuron/whisper-large-v3-turbo-sk`.
+
+Recreate it on a new machine with:
+
+```bash
+python3 -m pip install '.[stt-convert]'
+mkdir -p models/whisper
+ct2-transformers-converter \
+  --model NaiveNeuron/whisper-large-v3-turbo-sk \
+  --output_dir models/whisper/whisper-large-v3-turbo-sk-ct2-int8 \
+  --quantization int8 \
+  --copy_files preprocessor_config.json tokenizer_config.json vocab.json merges.txt normalizer.json added_tokens.json special_tokens_map.json generation_config.json
+```
+
 ## Partial Transcript
 
-`audio.partial_transcript_enabled` controls the live `you~>` preview while recording. It is only a console preview; the final `you>` transcript is still produced from the full utterance and is the only text sent to the LLM.
+`audio.partial_transcript_enabled` controls the live `you~>` preview while recording. If `audio.partial_transcript_use_as_final` is true and the preview is fresh enough, the final `you>` text reuses that transcript instead of running a second full STT pass.
 
 ## Validation
 

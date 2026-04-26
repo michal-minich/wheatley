@@ -14,6 +14,7 @@ from wheatly.language import (
     apply_configured_language,
     match_language_switch,
     model_selection_message,
+    online_llm_model,
     read_language_state,
     set_language_state,
 )
@@ -79,7 +80,7 @@ class VoiceAgent:
                 self.cfg.llm,
                 backend=remote.backend,
                 base_url=remote.base_url,
-                model=remote.model,
+                model=online_llm_model(self.cfg),
                 api_key=remote.api_key,
                 timeout_seconds=remote.request_timeout_seconds,
             )
@@ -106,6 +107,8 @@ class VoiceAgent:
             with self.stt_lock:
                 self.stt = build_stt(self.cfg.stt)
             self.tts = build_tts(self.cfg)
+            if self.model_selection.mode == "online":
+                self.select_chat_model()
         return ToolResult(name="set_language", ok=ok, content=content)
 
     def handle_text(self, text: str, speak: bool = True) -> TurnResult:
@@ -316,7 +319,12 @@ class VoiceAgent:
             words=_count_words(final_text),
             duration_seconds=stream_ended_at - (first_chunk_at or stream_ended_at),
         )
-        if speak and not self.cfg.tts.stream_speech and final_text:
+        if (
+            speak
+            and not self.cfg.tts.stream_speech
+            and final_text
+            and not (self.cfg.tools.enabled and parse_tool_calls(final_text))
+        ):
             started_at = time.perf_counter()
             self.tts.speak(final_text)
             self._record_spoken_segment(final_text, time.perf_counter() - started_at)

@@ -21,6 +21,10 @@ def apply_configured_language(cfg: Config, language: Optional[str] = None) -> st
 
     cfg.runtime.default_language = code
     cfg.agent.default_response_language = option.response_language or option.label
+    if option.audio_partial_transcript_enabled is not None:
+        cfg.audio.partial_transcript_enabled = option.audio_partial_transcript_enabled
+    if option.audio_partial_transcript_use_as_final is not None:
+        cfg.audio.partial_transcript_use_as_final = option.audio_partial_transcript_use_as_final
     if option.stt_model is not None:
         cfg.stt.model = option.stt_model
     cfg.stt.language = option.stt_language
@@ -52,6 +56,8 @@ def apply_configured_language(cfg: Config, language: Optional[str] = None) -> st
         cfg.tts.volume = option.tts_volume
     if option.tts_leading_silence_ms is not None:
         cfg.tts.leading_silence_ms = option.tts_leading_silence_ms
+    if option.tts_stream_speech is not None:
+        cfg.tts.stream_speech = option.tts_stream_speech
     if option.tts_stream_initial_min_words is not None:
         cfg.tts.stream_initial_min_words = option.tts_stream_initial_min_words
     if option.tts_stream_min_words is not None:
@@ -205,11 +211,21 @@ def model_selection_message(cfg: Config, mode: str) -> str:
     return cfg.llm.remote.offline_message
 
 
+def online_llm_model(cfg: Config) -> str:
+    code = normalize_language_code(cfg, cfg.runtime.default_language)
+    option = cfg.language.languages.get(code or "") if code else None
+    if option and option.online_llm_model is not None:
+        return option.online_llm_model
+    return cfg.llm.remote.model
+
+
 def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
     return {
         "language": code,
         "label": option.label,
         "response_language": option.response_language,
+        "audio_partial_transcript_enabled": option.audio_partial_transcript_enabled,
+        "audio_partial_transcript_use_as_final": option.audio_partial_transcript_use_as_final,
         "stt_model": option.stt_model,
         "stt_language": option.stt_language,
         "tts_backend": option.tts_backend,
@@ -218,12 +234,14 @@ def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
         "tts_edge_voice": option.tts_edge_voice,
         "tts_length_scale": option.tts_length_scale,
         "tts_leading_silence_ms": option.tts_leading_silence_ms,
+        "tts_stream_speech": option.tts_stream_speech,
         "tts_stream_initial_min_words": option.tts_stream_initial_min_words,
         "tts_stream_min_words": option.tts_stream_min_words,
         "tts_stream_feedback_min_words": option.tts_stream_feedback_min_words,
         "confirmation": option.confirmation,
         "online_model_message": option.online_model_message,
         "offline_model_message": option.offline_model_message,
+        "online_llm_model": option.online_llm_model,
     }
 
 

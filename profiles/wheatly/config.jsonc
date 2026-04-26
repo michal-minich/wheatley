@@ -20,10 +20,12 @@
     "vad_threshold": 0.018,
     // Minimum speech duration before accepting an utterance.
     "min_speech_seconds": 0.45,
-    // Silence duration that ends the utterance.
-    "silence_seconds": 5,
-    // Maximum single user utterance duration.
-    "max_utterance_seconds": 12.0,
+    // Silence duration that ends the utterance; increase if you pause while thinking.
+    "silence_seconds": 7.0,
+    // Keep only this much trailing silence in the WAV sent to STT.
+    "trailing_silence_keep_seconds": 0.6,
+    // Hard cap for one user utterance even if VAD keeps hearing speech.
+    "max_utterance_seconds": 45.0,
     // Maximum time to wait for speech before timing out.
     "max_wait_seconds": 30.0,
     // Recorded input audio folder.
@@ -37,7 +39,7 @@
     // Use the last live preview transcript as the final user text when it is fresh enough.
     "partial_transcript_use_as_final": true,
     // Maximum age of the last preview transcript at recording end before falling back to full STT.
-    "partial_transcript_final_max_age_seconds": 6.0
+    "partial_transcript_final_max_age_seconds": 8.0
   },
   // Persona identity exposed to prompts.
   "agent": {
@@ -87,6 +89,10 @@
         "label": "English",
         // Language instruction injected into the LLM prompt.
         "response_language": "English",
+        // Show live partial transcript while listening in English.
+        "audio_partial_transcript_enabled": true,
+        // English small STT is fast enough that a fresh partial transcript can be used as final text.
+        "audio_partial_transcript_use_as_final": true,
         // faster-whisper model for this language.
         "stt_model": "small.en",
         // STT language hint.
@@ -121,6 +127,8 @@
         "tts_volume": 1.05,
         // Silence prepended before playback to avoid clipped first letters.
         "tts_leading_silence_ms": 0,
+        // If true, speech starts while text is still streaming.
+        "tts_stream_speech": true,
         // English first streamed TTS chunk target. Higher avoids tiny "Sure." chunks.
         "tts_stream_initial_min_words": 5,
         // English later streamed TTS chunk target. Higher reduces playback gaps between sentences.
@@ -137,6 +145,8 @@
         "online_model_message": "using smarter online model",
         // Printed/spoken when the local offline model is selected while starting in English.
         "offline_model_message": "using offline model",
+        // Online LM Studio model to use for English. Offline model remains llm.model.
+        "online_llm_model": "qwen3.6-35b-a3b-ud-mlx",
         // Exact-ish phrases that trigger direct switching before the LLM.
         "switch_phrases": [
           "switch to english",
@@ -153,14 +163,18 @@
           "switch the language"
         ]
       },
-      // Slovak quality mode. Medium Whisper is slower but better for Slovak.
+      // Slovak quality mode. Uses Slovak fine-tuned Whisper large-v3-turbo in CTranslate2 int8 format.
       "sk": {
         // Human-readable language name.
         "label": "Slovak",
         // Language instruction injected into the LLM prompt.
         "response_language": "Slovak",
-        // faster-whisper model for this language.
-        "stt_model": "medium",
+        // Disabled for Slovak large STT; live partial transcription was slow and could repeat stale text.
+        "audio_partial_transcript_enabled": false,
+        // Always run one clean final Slovak transcription from the saved utterance.
+        "audio_partial_transcript_use_as_final": false,
+        // faster-whisper model for this language. This local folder is converted from NaiveNeuron/whisper-large-v3-turbo-sk.
+        "stt_model": "models/whisper/whisper-large-v3-turbo-sk-ct2-int8",
         // STT language hint.
         "stt_language": "sk",
         // Slovak TTS backend. Current default is online Microsoft Edge neural voice for a male voice.
@@ -175,10 +189,10 @@
         "tts_piper_speaker": null,
         // Edge TTS Slovak male voice.
         "tts_edge_voice": "sk-SK-LukasNeural",
-        // Edge TTS speaking rate. Slightly slower for clearer Slovak.
-        "tts_edge_rate": "-4%",
-        // Edge TTS pitch lift to keep it closer to the energetic English character.
-        "tts_edge_pitch": "+8Hz",
+        // Edge TTS speaking rate. Positive values speak faster.
+        "tts_edge_rate": "+8%",
+        // Edge TTS pitch. Lower value makes the Slovak male voice deeper.
+        "tts_edge_pitch": "-14Hz",
         // Edge TTS gain.
         "tts_edge_volume": "+0%",
         // Piper speed. Slovak is slower for clearer pronunciation.
@@ -193,22 +207,26 @@
         "tts_volume": 1.05,
         // Silence prepended before playback to avoid clipped first letters.
         "tts_leading_silence_ms": 80,
-        // Slovak first streamed TTS chunk target.
-        "tts_stream_initial_min_words": 1,
-        // Slovak later streamed TTS chunk target.
-        "tts_stream_min_words": 10,
+        // Disabled for Slovak Edge TTS because per-chunk network synthesis caused long gaps during speech.
+        "tts_stream_speech": false,
+        // Slovak first streamed TTS chunk target. Larger chunks reduce Edge TTS network gaps.
+        "tts_stream_initial_min_words": 8,
+        // Slovak later streamed TTS chunk target. Larger chunks reduce pauses between generated audio files.
+        "tts_stream_min_words": 26,
         // Slovak hard cap for streamed TTS chunks.
-        "tts_stream_max_words": 60,
+        "tts_stream_max_words": 90,
         // Slovak minimum timeout fallback chunk size.
-        "tts_stream_feedback_min_words": 8,
+        "tts_stream_feedback_min_words": 12,
         // Slovak maximum wait before first speech feedback.
-        "tts_stream_max_initial_wait_seconds": 0.5,
+        "tts_stream_max_initial_wait_seconds": 0.8,
         // Spoken/written confirmation after switching.
         "confirmation": "Ahoj",
         // Printed/spoken when the smarter online model is selected while starting in Slovak.
         "online_model_message": "Používam múdrejší online model.",
         // Printed/spoken when the local offline model is selected while starting in Slovak.
         "offline_model_message": "Používam offline model.",
+        // Online LM Studio model to use for Slovak. Offline model remains llm.model.
+        "online_llm_model": "mlx-community/gemma-4-31b-it",
         // Exact-ish phrases that trigger direct switching before the LLM.
         "switch_phrases": [
           "switch to slovak",
@@ -260,7 +278,7 @@
       "backend": "openai_compat",
       // LM Studio OpenAI API base URL. /v1 is accepted here.
       "base_url": "http://jankas-mac-mini.local:1234/v1",
-      // Model name. Empty string lets LM Studio use its current/default loaded model.
+      // Fallback model name if a language does not set online_llm_model. Empty string lets LM Studio use its current/default loaded model.
       "model": "",
       // API key for OpenAI-compatible servers. LM Studio usually ignores this.
       "api_key": "EMPTY",

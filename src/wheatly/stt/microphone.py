@@ -44,6 +44,7 @@ class MicrophoneRecorder:
         started = False
         speech_started_at = None
         last_voice_at = None
+        last_voice_frame_count = 0
         frames = []
         wait_started_at = time.monotonic()
 
@@ -61,7 +62,8 @@ class MicrophoneRecorder:
                     rms = float(np.sqrt(np.mean(samples * samples)))
                     now = time.monotonic()
 
-                    if rms >= self.cfg.vad_threshold:
+                    has_voice = rms >= self.cfg.vad_threshold
+                    if has_voice:
                         if not started:
                             started = True
                             speech_started_at = now
@@ -69,6 +71,8 @@ class MicrophoneRecorder:
 
                     if started:
                         frames.append(block)
+                        if has_voice:
+                            last_voice_frame_count = len(frames)
                         partial_worker.maybe_submit(frames, now)
 
                     if (
@@ -96,6 +100,7 @@ class MicrophoneRecorder:
         if not frames:
             raise RuntimeError("recording ended without audio frames")
 
+        frames = _trim_trailing_silence(frames, last_voice_frame_count, self.cfg)
         _write_wav(output_path, frames, self.cfg)
         return output_path
 
@@ -177,3 +182,16 @@ def _write_wav(output_path: Path, frames, cfg: AudioConfig) -> None:
         handle.setsampwidth(2)
         handle.setframerate(cfg.sample_rate)
         handle.writeframes(audio.tobytes())
+
+
+def _trim_trailing_silence(frames, last_voice_frame_count: int, cfg: AudioConfig):
+    if not frames or last_voice_frame_count <= 0:
+        return frames
+    keep_samples = max(0, int(cfg.trailing_silence_keep_seconds * cfg.sample_rate))
+    trimmed = list(frames[:last_voice_frame_count])
+    for block in frames[last_voice_frame_count:]:
+        if keep_samples <= 0:
+            break
+        trimmed.append(block)
+        keep_samples -= len(block)
+    return trimmed or frames

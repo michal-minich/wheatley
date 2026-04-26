@@ -19,6 +19,12 @@ audio = [
 stt = [
   "faster-whisper>=1.0.0"
 ]
+stt-convert = [
+  "faster-whisper>=1.0.0",
+  "transformers>=4.46,<5",
+  "torch>=2.2",
+  "sentencepiece>=0.2"
+]
 tts = [
   "edge-tts>=7.0.0"
 ]
@@ -29,6 +35,9 @@ all = [
   "numpy>=1.24",
   "sounddevice>=0.4.6",
   "faster-whisper>=1.0.0",
+  "transformers>=4.46,<5",
+  "torch>=2.2",
+  "sentencepiece>=0.2",
   "edge-tts>=7.0.0"
 ]
 
