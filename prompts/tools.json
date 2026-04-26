@@ -1,0 +1,33 @@
+{
+  "$comment": "Editable tool descriptions and instructions. Tool names and JSON parameter schemas stay in code.",
+  "tools": {
+    "get_time": {
+      "description": "Return local date, time, timezone and uptime.",
+      "instructions": "Use this when the user asks about the current time, date, timezone, or how long the robot has been running."
+    },
+    "robot_status": {
+      "description": "Return basic runtime, platform and robot state.",
+      "instructions": "Use this when the user asks about battery, status, health, platform, active model, or robot state."
+    },
+    "set_eye_expression": {
+      "description": "Set the robot eye expression state.",
+      "instructions": "Use this for visible emotion or attention state changes. Prefer thinking while working, happy/excited for positive reactions, confused/worried when uncertain."
+    },
+    "calculator": {
+      "description": "Evaluate a safe math expression with functions like sqrt, sin, gcd, lcm, round, floor and ceil.",
+      "instructions": "Use this for arithmetic, roots, trigonometry, rounding, gcd/lcm, powers, and similar exact math. Do not do mental math when this tool can answer precisely."
+    },
+    "remember": {
+      "description": "Persist a short user-provided memory for future chats.",
+      "instructions": "Use this when the user says phrases like \"remember this\", \"remember that\", or asks you to remember a preference, fact, name, project detail, or instruction for later."
+    },
+    "take_photo": {
+      "description": "Capture a photo if a configured safe camera command exists.",
+      "instructions": "Use this only when a camera command is configured and the user asks to see, look, inspect, or take a photo."
+    },
+    "run_safe_cli_tool": {
+      "description": "Run one whitelisted local command by name.",
+      "instructions": "Use this only for commands explicitly listed in configuration. Never request raw shell access."
+    }
+  }
+}

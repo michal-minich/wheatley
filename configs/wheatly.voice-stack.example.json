@@ -1,0 +1,60 @@
+{
+  "audio": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "vad_threshold": 0.018,
+    "min_speech_seconds": 0.45,
+    "silence_seconds": 0.75,
+    "max_utterance_seconds": 14.0,
+    "max_wait_seconds": 30.0,
+    "utterance_dir": "runtime/audio"
+  },
+  "stt": {
+    "backend": "faster_whisper",
+    "model": "small.en",
+    "language": "en",
+    "device": "cpu",
+    "compute_type": "int8"
+  },
+  "llm": {
+    "backend": "ollama",
+    "model": "qwen3.5:4b",
+    "base_url": "http://localhost:11434",
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "max_tokens": 220,
+    "context_turns": 6,
+    "enable_thinking": false
+  },
+  "tts": {
+    "backend": "piper",
+    "enabled": true,
+    "output_dir": "runtime/audio",
+    "playback": true,
+    "piper_binary": "piper",
+    "piper_model": "models/piper/en_GB-alan-medium.onnx",
+    "length_scale": 0.66,
+    "noise_scale": 0.72,
+    "noise_w_scale": 0.82,
+    "sentence_silence": 0.02,
+    "volume": 1.05,
+    "stream_speech": true,
+    "adaptive_streaming": true,
+    "stream_initial_min_words": 12,
+    "stream_min_words": 24,
+    "stream_max_words": 60,
+    "stream_feedback_min_words": 8,
+    "stream_max_initial_wait_seconds": 1.2,
+    "filter": {
+      "enabled": false,
+      "ffmpeg_binary": "ffmpeg",
+      "preset": "wheatley_bright"
+    }
+  },
+  "prompts": {
+    "system_path": "prompts/system.md",
+    "user_path": "prompts/user.md",
+    "tools_path": "prompts/tools.json",
+    "memory_path": "memory/wheatly.md"
+  }
+}

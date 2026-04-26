@@ -1,0 +1,49 @@
+import unittest
+
+from wheatly.tts.base import SpeechResult, TTSBackend
+from wheatly.tts.streaming import StreamingSpeaker
+
+
+class RecordingTTS(TTSBackend):
+    def __init__(self):
+        self.spoken = []
+
+    def speak(self, text: str) -> SpeechResult:
+        self.spoken.append(text)
+        return SpeechResult(audio_path=None, spoken=True)
+
+
+class StreamingSpeakerTests(unittest.TestCase):
+    def test_initial_wait_emits_short_first_sentence(self):
+        tts = RecordingTTS()
+        with StreamingSpeaker(
+            tts,
+            enabled=True,
+            min_words=24,
+            max_words=60,
+            initial_min_words=24,
+            feedback_min_words=8,
+            max_initial_wait_seconds=0.0,
+        ) as speaker:
+            speaker.feed("Sure. I can tell you a longer story after that.")
+
+        self.assertEqual(tts.spoken[0], "Sure.")
+
+    def test_initial_wait_emits_feedback_chunk_without_sentence(self):
+        tts = RecordingTTS()
+        with StreamingSpeaker(
+            tts,
+            enabled=True,
+            min_words=24,
+            max_words=60,
+            initial_min_words=24,
+            feedback_min_words=4,
+            max_initial_wait_seconds=0.0,
+        ) as speaker:
+            speaker.feed("one two three four five six")
+
+        self.assertEqual(tts.spoken[0], "one two three four")
+
+
+if __name__ == "__main__":
+    unittest.main()

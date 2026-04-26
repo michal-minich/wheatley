@@ -1,0 +1,15 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+runtime/audio/*.wav
+runtime/audio/*.aiff
+runtime/audio/*.mp3
+runtime/logs/*.jsonl
+runtime/state/*.json
+configs/wheatly.local.json
+models/
+
