@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This repo is the local-first Wheatly voice-agent project. Keep changes pragmatic, portable, and documented.
+This repo is the local-first Wheatley voice-agent project. Keep changes pragmatic, portable, and documented.
 
 ## Project Intent
 
@@ -8,9 +8,9 @@ Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 
 
 ## Current Architecture
 
-- Python package under `src/wheatly`.
-- CLI entrypoint: `python3 -m wheatly` or installed `wheatly`.
-- Config format: JSONC profile folder under `profiles/wheatly/`.
+- Python package under `src/wheatley`.
+- CLI entrypoint: `python3 -m wheatley` or installed `wheatley`.
+- Config format: JSONC profile folder under `profiles/wheatley/`.
 - Editable prompts live beside each profile config as `system.md`, `user.md`, and `tools.jsonc`.
 - Persistent memory lives beside each profile config as `memory.md` and is injected into the system prompt.
 - Runtime files live under `runtime/<profile>/` by convention.
@@ -19,7 +19,7 @@ Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 
 ## Hard Rules
 
 - Do not give the model unrestricted shell access.
-- Tool use must stay whitelisted through `src/wheatly/tools`.
+- Tool use must stay whitelisted through `src/wheatley/tools`.
 - Do not add web/search/internet tools unless explicitly requested again.
 - Do not re-add notes search without a clear product reason.
 - Keep 8 GB RAM as the default design constraint.
@@ -50,8 +50,8 @@ Before handing back changes, run:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
-PYTHONPATH=src python3 -m wheatly doctor
-PYTHONPATH=src python3 -m wheatly once --text "what time is it?"
+PYTHONPATH=src python3 -m wheatley doctor
+PYTHONPATH=src python3 -m wheatley once --text "what time is it?"
 ```
 
 If external dependencies or models are unavailable, note that clearly and keep the echo backend smoke tests passing.

@@ -2,8 +2,8 @@ import unittest
 import threading
 import time
 
-from wheatly.tts.base import PreparedSpeech, SpeechResult, TTSBackend
-from wheatly.tts.streaming import StreamingSpeaker
+from wheatley.tts.base import PreparedSpeech, SpeechResult, TTSBackend
+from wheatley.tts.streaming import StreamingSpeaker
 
 
 class RecordingTTS(TTSBackend):

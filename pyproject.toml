@@ -3,12 +3,12 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wheatly"
+name = "wheatley"
 version = "0.1.0"
 description = "Offline-first voice agent pipeline for a small Wheatley-style robot."
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Wheatly project" }]
+authors = [{ name = "Wheatley project" }]
 dependencies = []
 
 [project.optional-dependencies]
@@ -42,8 +42,8 @@ all = [
 ]
 
 [project.scripts]
-wheatly = "wheatly.cli:main"
-wheatly-stt-server = "wheatly.stt.server:main"
+wheatley = "wheatley.cli:main"
+wheatley-stt-server = "wheatley.stt.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

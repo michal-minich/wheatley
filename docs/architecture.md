@@ -31,19 +31,19 @@ End-to-end multimodal/audio models remain interesting for later experiments, but
 
 ## Main Modules
 
-- `wheatly.cli`: command-line interface.
-- `wheatly.pipeline`: turn orchestration and conversation history.
-- `wheatly.stt`: keyboard, faster-whisper, whisper.cpp, remote STT fallback, and the bundled STT HTTP server.
-- `wheatly.llm`: echo, Ollama, and OpenAI-compatible adapters.
-- `wheatly.tts`: no-op, macOS say, Piper, Edge TTS, and external command adapters.
-- `wheatly.audio`: playback and ffmpeg post-filter.
-- `wheatly.tools`: deterministic whitelist tools and parser.
+- `wheatley.cli`: command-line interface.
+- `wheatley.pipeline`: turn orchestration and conversation history.
+- `wheatley.stt`: keyboard, faster-whisper, whisper.cpp, remote STT fallback, and the bundled STT HTTP server.
+- `wheatley.llm`: echo, Ollama, and OpenAI-compatible adapters.
+- `wheatley.tts`: no-op, macOS say, Piper, Edge TTS, and external command adapters.
+- `wheatley.audio`: playback and ffmpeg post-filter.
+- `wheatley.tools`: deterministic whitelist tools and parser.
 
 ## Profiles, Instructions And Memory
 
-The system prompt is assembled by `wheatly.prompting.build_system_prompt()`.
+The system prompt is assembled by `wheatley.prompting.build_system_prompt()`.
 
-The active persona is the profile folder under `profiles/wheatly/`:
+The active persona is the profile folder under `profiles/wheatley/`:
 
 - `config.jsonc`: runtime, model, voice, tool and path settings.
 - `system.md`: main assistant behavior and tool-calling rules.
@@ -75,10 +75,10 @@ The default `stt.backend` is `remote_fallback`:
 
 Language switching keeps local and remote STT model choices separate. English uses `small.en` for both remote and local quality. Slovak requests the server-side CTranslate2 conversion of `NaiveNeuron/whisper-large-v3-sk` at `models/whisper/whisper-large-v3-sk-ct2-int8` and keeps the existing local `models/whisper/whisper-large-v3-turbo-sk-ct2-int8` fallback.
 
-The remote server lives in this repo as `wheatly.stt.server` and can be started with:
+The remote server lives in this repo as `wheatley.stt.server` and can be started with:
 
 ```bash
-PYTHONPATH=src python3 -m wheatly stt-server \
+PYTHONPATH=src python3 -m wheatley stt-server \
   --host 0.0.0.0 \
   --port 8765 \
   --default-model small.en \

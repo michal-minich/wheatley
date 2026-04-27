@@ -7,7 +7,7 @@ if [ -f ".venv/bin/activate" ]; then
   . ".venv/bin/activate"
 fi
 
-exec env PYTHONPATH=src python3 -m wheatly stt-server \
+exec env PYTHONPATH=src python3 -m wheatley stt-server \
   --host 0.0.0.0 \
   --port 8765 \
   --default-model small.en \

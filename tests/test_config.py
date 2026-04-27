@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wheatly.config import load_config
-from wheatly.jsonc import loads_jsonc
+from wheatley.config import load_config
+from wheatley.jsonc import loads_jsonc
 
 
 class ConfigTests(unittest.TestCase):
@@ -12,7 +12,7 @@ class ConfigTests(unittest.TestCase):
             """
             {
               // comment
-              "name": "wheatly",
+              "name": "wheatley",
               "items": [1, 2,],
             }
             """
@@ -46,15 +46,15 @@ class ConfigTests(unittest.TestCase):
         cfg = load_config()
         self.assertEqual(
             Path(cfg.runtime.turn_log),
-            Path("profiles/wheatly/runtime/logs/turns.jsonl"),
+            Path("profiles/wheatley/runtime/logs/turns.jsonl"),
         )
         self.assertEqual(
             Path(cfg.runtime.tool_log),
-            Path("profiles/wheatly/runtime/logs/tools.jsonl"),
+            Path("profiles/wheatley/runtime/logs/tools.jsonl"),
         )
         self.assertEqual(
             Path(cfg.audio.utterance_dir),
-            Path("profiles/wheatly/runtime/audio"),
+            Path("profiles/wheatley/runtime/audio"),
         )
 
 

@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wheatly.config import Config
-from wheatly.llm.base import LLMBackend, LLMMessage, LLMResponse
-from wheatly.memory import (
+from wheatley.config import Config
+from wheatley.llm.base import LLMBackend, LLMMessage, LLMResponse
+from wheatley.memory import (
     auto_memory_path,
     memory_consolidate_instructions_path,
     memory_candidates_path,
@@ -13,8 +13,8 @@ from wheatly.memory import (
     memory_update_instructions_path,
     refresh_auto_memory,
 )
-from wheatly.pipeline import VoiceAgent, build_system_prompt
-from wheatly.tts.base import SpeechResult, TTSBackend
+from wheatley.pipeline import VoiceAgent, build_system_prompt
+from wheatley.tts.base import SpeechResult, TTSBackend
 
 
 class SequenceLLM(LLMBackend):
@@ -92,7 +92,7 @@ class AutoMemoryTests(unittest.TestCase):
             _write_turn(
                 Path(cfg.runtime.turn_log),
                 "2026-04-27T11:00:00+02:00",
-                "I am building Wheatly a robot body.",
+                "I am building Wheatley a robot body.",
                 "That robot body sounds useful.",
             )
             llm = SequenceLLM(
@@ -100,7 +100,7 @@ class AutoMemoryTests(unittest.TestCase):
                     json.dumps(
                         {
                             "current_projects": [
-                                "User is building Wheatly a robot body."
+                                "User is building Wheatley a robot body."
                             ],
                             "stable_user_facts": [],
                             "preferences": [],
@@ -109,11 +109,11 @@ class AutoMemoryTests(unittest.TestCase):
                     ),
                     json.dumps(
                         {
-                            "auto_memory_md": "# Wheatly Auto Memory\n\n"
+                            "auto_memory_md": "# Wheatley Auto Memory\n\n"
                             "## Stable User Facts\n- None yet.\n\n"
                             "## Preferences\n- None yet.\n\n"
                             "## Current Projects\n"
-                            "- User is building Wheatly a robot body.\n\n"
+                            "- User is building Wheatley a robot body.\n\n"
                             "## Recent Context\n- None yet.\n"
                         }
                     ),
@@ -128,7 +128,7 @@ class AutoMemoryTests(unittest.TestCase):
             prompts = "\n\n".join(message.content for call in llm.messages for message in call)
             self.assertIn("That robot body sounds useful.", prompts)
             self.assertIn(
-                "User is building Wheatly a robot body.",
+                "User is building Wheatley a robot body.",
                 auto_memory_path(cfg).read_text(encoding="utf-8"),
             )
 
@@ -159,7 +159,7 @@ class AutoMemoryTests(unittest.TestCase):
                 "- Manual fact.", encoding="utf-8"
             )
             auto_memory_path(cfg).write_text(
-                "# Wheatly Auto Memory\n\n## Stable User Facts\n- Auto fact.\n",
+                "# Wheatley Auto Memory\n\n## Stable User Facts\n- Auto fact.\n",
                 encoding="utf-8",
             )
             agent = VoiceAgent(cfg, tts=SilentTTS())
@@ -214,14 +214,14 @@ class AutoMemoryTests(unittest.TestCase):
                 "CONSOLIDATE ONLY", encoding="utf-8"
             )
             auto_memory_path(cfg).write_text(
-                "# Wheatly Auto Memory\n\n## Stable User Facts\n- Old fact.\n",
+                "# Wheatley Auto Memory\n\n## Stable User Facts\n- Old fact.\n",
                 encoding="utf-8",
             )
             llm = SequenceLLM(
                 [
                     json.dumps(
                         {
-                            "auto_memory_md": "# Wheatly Auto Memory\n\n"
+                            "auto_memory_md": "# Wheatley Auto Memory\n\n"
                             "## Stable User Facts\n- Old fact.\n\n"
                             "## Preferences\n- None yet.\n\n"
                             "## Current Projects\n- None yet.\n\n"
@@ -290,7 +290,7 @@ class AutoMemoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = _memory_cfg(Path(tmp))
             auto_memory_path(cfg).write_text(
-                "# Wheatly Auto Memory\n\n## Stable User Facts\n- Existing fact.\n",
+                "# Wheatley Auto Memory\n\n## Stable User Facts\n- Existing fact.\n",
                 encoding="utf-8",
             )
             _write_turn(
@@ -313,7 +313,7 @@ class AutoMemoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = _memory_cfg(Path(tmp))
             auto_memory_path(cfg).write_text(
-                "# Wheatly Auto Memory\n\n"
+                "# Wheatley Auto Memory\n\n"
                 "## Stable User Facts\n- User likes Lua and Pico-8.\n",
                 encoding="utf-8",
             )

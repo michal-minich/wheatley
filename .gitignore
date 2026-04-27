@@ -19,5 +19,6 @@ runtime/**/*.jsonl
 runtime/**/*.json
 profiles/*/runtime/
 profiles/*/memory.md
+!profiles/wheatley/memory.md
 profiles/*/auto_memory.md
 models/

@@ -1,7 +1,7 @@
 import unittest
 
-from wheatly.config import AudioConfig
-from wheatly.stt.microphone import _trim_trailing_silence
+from wheatley.config import AudioConfig
+from wheatley.stt.microphone import _trim_trailing_silence
 
 
 class MicrophoneTests(unittest.TestCase):

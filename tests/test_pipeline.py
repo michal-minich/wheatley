@@ -3,12 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from wheatly.config import Config
-from wheatly.language import model_selection_message, online_llm_model
-from wheatly.llm.base import LLMBackend, LLMMessage, LLMResponse
-from wheatly.pipeline import VoiceAgent, build_system_prompt
-from wheatly.tools.registry import ToolRegistry, ToolResult, ToolSpec
-from wheatly.tts.base import SpeechResult, TTSBackend
+from wheatley.config import Config
+from wheatley.language import model_selection_message, online_llm_model
+from wheatley.llm.base import LLMBackend, LLMMessage, LLMResponse
+from wheatley.pipeline import VoiceAgent, build_system_prompt
+from wheatley.tools.registry import ToolRegistry, ToolResult, ToolSpec
+from wheatley.tts.base import SpeechResult, TTSBackend
 
 
 class SilentTTS(TTSBackend):
@@ -170,7 +170,7 @@ class PipelineTests(unittest.TestCase):
             Path(cfg.prompts.memory_path).write_text("- User likes fast starts.", encoding="utf-8")
             agent = VoiceAgent(cfg, tts=SilentTTS())
             prompt = build_system_prompt(cfg, agent.tools)
-            self.assertIn("System for Wheatly.", prompt)
+            self.assertIn("System for Wheatley.", prompt)
             self.assertIn("Prefer direct answers.", prompt)
             self.assertIn("User likes fast starts.", prompt)
 

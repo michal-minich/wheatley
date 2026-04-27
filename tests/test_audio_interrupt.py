@@ -2,9 +2,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from wheatly.audio.interrupt import SpeechInterruptMonitor, is_stop_interrupt
-from wheatly.config import AudioConfig
-from wheatly.stt.base import Transcription
+from wheatley.audio.interrupt import SpeechInterruptMonitor, is_stop_interrupt
+from wheatley.config import AudioConfig
+from wheatley.stt.base import Transcription
 
 
 class AudioInterruptTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class AudioInterruptTests(unittest.TestCase):
         frames = [_FakeBlock(1024)]
         audio_queue = __import__("queue").Queue()
 
-        with patch("wheatly.audio.interrupt.stop_audio_playback") as stop:
+        with patch("wheatley.audio.interrupt.stop_audio_playback") as stop:
             monitor._write_candidate = lambda np, frames: Path("candidate.wav")
             monitor._verify_candidate(frames, audio_queue, _FakeNumpy())
 

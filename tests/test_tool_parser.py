@@ -1,6 +1,6 @@
 import unittest
 
-from wheatly.tools.parser import parse_tool_calls
+from wheatley.tools.parser import parse_tool_calls
 
 
 class ToolParserTests(unittest.TestCase):

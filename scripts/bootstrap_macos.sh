@@ -7,5 +7,5 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[audio,stt]'
 
 echo "Bootstrap complete."
-echo "Run: PYTHONPATH=src python3 -m wheatly doctor"
+echo "Run: PYTHONPATH=src python3 -m wheatley doctor"
 

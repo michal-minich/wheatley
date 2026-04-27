@@ -5,7 +5,7 @@ import unittest
 from io import StringIO
 from unittest.mock import patch
 
-from wheatly.cli import (
+from wheatley.cli import (
     RecordedUtterance,
     _can_use_partial_as_final,
     _format_preview_block,
@@ -14,8 +14,8 @@ from wheatly.cli import (
     _is_new_chat_command,
     _print_tool_start,
 )
-from wheatly.config import Config
-from wheatly.pipeline import TurnResult
+from wheatley.config import Config
+from wheatley.pipeline import TurnResult
 
 
 class CliCommandTests(unittest.TestCase):

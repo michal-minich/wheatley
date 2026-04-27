@@ -3,10 +3,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from wheatly.config import Config
-from wheatly.tools.announcements import tool_start_message
-from wheatly.tools.builtins import build_registry
-from wheatly.tools.registry import ToolCall
+from wheatley.config import Config
+from wheatley.tools.announcements import tool_start_message
+from wheatley.tools.builtins import build_registry
+from wheatley.tools.registry import ToolCall
 
 
 class ToolTests(unittest.TestCase):
@@ -84,7 +84,7 @@ class ToolTests(unittest.TestCase):
             b'"description":"Example result","extra_snippets":["More context"]}]}}'
         )
         with patch.dict("os.environ", {"BRAVE_SEARCH_API_KEY": "test-key"}), patch(
-            "wheatly.tools.web.urllib.request.urlopen",
+            "wheatley.tools.web.urllib.request.urlopen",
             return_value=_FakeResponse(body, "application/json"),
         ) as urlopen:
             result = registry.execute(ToolCall("web_search", {"query": "example"}))
@@ -102,7 +102,7 @@ class ToolTests(unittest.TestCase):
         cfg.tools.web_fetch_enabled = True
         registry = build_registry(cfg)
         with patch(
-            "wheatly.tools.web.socket.getaddrinfo",
+            "wheatley.tools.web.socket.getaddrinfo",
             return_value=[(None, None, None, None, ("127.0.0.1", 80))],
         ):
             result = registry.execute(ToolCall("fetch_url", {"url": "http://localhost/"}))
@@ -120,9 +120,9 @@ class ToolTests(unittest.TestCase):
         """
         opener = _FakeOpener(_FakeResponse(html, "text/html", "https://example.com/page"))
         with patch(
-            "wheatly.tools.web.socket.getaddrinfo",
+            "wheatley.tools.web.socket.getaddrinfo",
             return_value=[(None, None, None, None, ("93.184.216.34", 443))],
-        ), patch("wheatly.tools.web.urllib.request.build_opener", return_value=opener):
+        ), patch("wheatley.tools.web.urllib.request.build_opener", return_value=opener):
             result = registry.execute(
                 ToolCall("fetch_url", {"url": "https://example.com/page"})
             )

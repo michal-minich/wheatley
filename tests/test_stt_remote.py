@@ -7,10 +7,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from wheatly.config import Config, STTConfig
-from wheatly.language import apply_configured_language
-from wheatly.stt.backends import RemoteFallbackSTT, build_stt
-from wheatly.stt.base import STTBackend, Transcription
+from wheatley.config import Config, STTConfig
+from wheatley.language import apply_configured_language
+from wheatley.stt.backends import RemoteFallbackSTT, build_stt
+from wheatley.stt.base import STTBackend, Transcription
 
 
 class FixedSTT(STTBackend):

@@ -1,6 +1,6 @@
 import unittest
 
-from wheatly.llm.backends import _filter_reasoning_stream, _openai_endpoint_url, _strip_reasoning
+from wheatley.llm.backends import _filter_reasoning_stream, _openai_endpoint_url, _strip_reasoning
 
 
 class LLMBackendTests(unittest.TestCase):

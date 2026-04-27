@@ -135,7 +135,7 @@ Current default:
 - LLM: `qwen3.5:4b` through Ollama.
 - STT: `faster-whisper small.en`, int8 CPU.
 - TTS: Piper `en_GB-alan-medium`.
-- Run command: `./scripts/start_wheatly.sh`.
+- Run command: `./scripts/start_wheatley.sh`.
 
 ## D10: Stream Text And Start TTS Early
 
@@ -195,10 +195,10 @@ Decision: keep assistant instructions, user preferences, tool descriptions, and 
 
 Files:
 
-- `profiles/wheatly/system.md`
-- `profiles/wheatly/user.md`
-- `profiles/wheatly/tools.jsonc`
-- `profiles/wheatly/memory.md`
+- `profiles/wheatley/system.md`
+- `profiles/wheatley/user.md`
+- `profiles/wheatley/tools.jsonc`
+- `profiles/wheatley/memory.md`
 
 The `remember` tool appends short facts to the active profile memory. Manual memory is injected into the system prompt on every turn, so the model does not need a separate retrieval command to use it. `Start a new chat.` clears conversation history but keeps the editable prompts and persistent memory.
 
@@ -216,13 +216,13 @@ Quick updates run from turns newer than the last memory update at startup/new ch
 
 ## D13: Profile Folder Layout
 
-Decision: group all persona-specific editable files under `profiles/wheatly/`.
+Decision: group all persona-specific editable files under `profiles/wheatley/`.
 
 Reasoning:
 
 - The active profile doubles as the working example.
 - Config, prompts, tool wording, voice settings and memory travel together.
-- The active `profiles/wheatly/` config is the canonical example and runtime config.
+- The active `profiles/wheatley/` config is the canonical example and runtime config.
 - Main configs use `.jsonc` because comments belong next to settings.
 
 ## D14: Explicit Language Switching

@@ -2,7 +2,7 @@
 
 ## Profiles
 
-Active editable files are in `profiles/wheatly/`.
+Active editable files are in `profiles/wheatley/`.
 
 ```text
 config.jsonc   runtime, model, STT, TTS, tools and file paths
@@ -19,12 +19,12 @@ runtime/       profile-local logs, state, and generated audio
 ## Commands
 
 ```bash
-./scripts/start_wheatly.sh
-PYTHONPATH=src python3 -m wheatly chat --stream
-PYTHONPATH=src python3 -m wheatly once --stream --text "what time is it?"
-PYTHONPATH=src python3 -m wheatly transcribe path/to/audio.wav
-PYTHONPATH=src python3 -m wheatly tools
-PYTHONPATH=src python3 -m wheatly stats
+./scripts/start_wheatley.sh
+PYTHONPATH=src python3 -m wheatley chat --stream
+PYTHONPATH=src python3 -m wheatley once --stream --text "what time is it?"
+PYTHONPATH=src python3 -m wheatley transcribe path/to/audio.wav
+PYTHONPATH=src python3 -m wheatley tools
+PYTHONPATH=src python3 -m wheatley stats
 ```
 
 ## Web Search
@@ -35,7 +35,7 @@ The default profile enables `web_search` with Brave Search and `fetch_url` for r
 BRAVE_SEARCH_API_KEY=...
 ```
 
-`./scripts/start_wheatly.sh` loads `.env` before starting the voice loop. One-off commands can use the same environment variable from the shell. Do not commit real API keys.
+`./scripts/start_wheatley.sh` loads `.env` before starting the voice loop. One-off commands can use the same environment variable from the shell. Do not commit real API keys.
 
 `--stream` controls whether generated text streams in the terminal. When `--speak` is enabled, speech still uses streaming TTS automatically if `tts.stream_speech` is true in the active language.
 
@@ -59,15 +59,15 @@ Language-specific overrides are available as:
 
 `Remember this: ...` writes to the active profile memory file.
 
-Automatic memory refresh runs at startup and at the start of a new chat when new turns or a due consolidation exist. Quick updates print/say `wait, I'm updating my memory...`; full rewrites print/say `wait, I'm consolidating my memory...`. Quick updates process only turns newer than the last memory update; full consolidation can revisit recent logs and compact candidates. Raw `profiles/wheatly/runtime/logs/turns.jsonl` is append-only and should not be deleted. Each turn row includes active LLM `model_name`.
+Automatic memory refresh runs at startup and at the start of a new chat when new turns or a due consolidation exist. Quick updates print/say `wait, I'm updating my memory...`; full rewrites print/say `wait, I'm consolidating my memory...`. Quick updates process only turns newer than the last memory update; full consolidation can revisit recent logs and compact candidates. Raw `profiles/wheatley/runtime/logs/turns.jsonl` is append-only and should not be deleted. Each turn row includes active LLM `model_name`.
 
-Tool calls are audited separately in `profiles/wheatly/runtime/logs/tools.jsonl`. Each JSONL record includes the source (`direct_route`, `llm`, or `cli`), tool name, arguments, full result payload, and duration so calculator, memory, web search/fetch, and other tool issues can be replayed from the log.
+Tool calls are audited separately in `profiles/wheatley/runtime/logs/tools.jsonl`. Each JSONL record includes the source (`direct_route`, `llm`, or `cli`), tool name, arguments, full result payload, and duration so calculator, memory, web search/fetch, and other tool issues can be replayed from the log.
 
-Runtime audio under `profiles/wheatly/runtime/audio/` is also preserved. The app does not auto-delete recordings, generated replies, or partial STT snapshots.
+Runtime audio under `profiles/wheatley/runtime/audio/` is also preserved. The app does not auto-delete recordings, generated replies, or partial STT snapshots.
 
 If playback gets regular short pauses while speaking, check `audio.speech_interrupt_pause_tts_while_verifying` in `config.jsonc`. Keeping it `false` avoids pause spikes from false interrupt candidates.
 
-When `remember`, `run_safe_cli_tool`, `web_search`, or `fetch_url` starts, the CLI prints a colored `tool>` line. If speech is enabled, Wheatly also says a short active-language cue such as `Searching...` or `Hľadám...`.
+When `remember`, `run_safe_cli_tool`, `web_search`, or `fetch_url` starts, the CLI prints a colored `tool>` line. If speech is enabled, Wheatley also says a short active-language cue such as `Searching...` or `Hľadám...`.
 
 `Switch to Slovak.` / `hovor po slovensky` switches STT, prompt language hint, and TTS voice to Slovak and answers `Ahoj`.
 
@@ -104,7 +104,7 @@ The robot profile can use remote STT independently from the remote LLM. `stt.bac
 Start the server on Janka Mac from this repo:
 
 ```bash
-cd /Users/janka/mm/Wheatly
+cd /Users/janka/mm/Wheatley
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -e '.[stt]'
@@ -122,7 +122,7 @@ Transcription endpoint:
 
 ```bash
 curl http://jankas-mac-mini.local:8765/v1/audio/transcriptions \
-  -F file=@profiles/wheatly/runtime/audio/example.wav \
+  -F file=@profiles/wheatley/runtime/audio/example.wav \
   -F language=sk \
   -F model=models/whisper/whisper-large-v3-sk-ct2-int8
 ```

@@ -4,8 +4,8 @@ import wave
 from pathlib import Path
 from unittest.mock import patch
 
-from wheatly.audio.chimes import ensure_listening_chime, play_listening_chime
-from wheatly.config import AudioConfig
+from wheatley.audio.chimes import ensure_listening_chime, play_listening_chime
+from wheatley.config import AudioConfig
 
 
 class AudioChimeTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class AudioChimeTests(unittest.TestCase):
     def test_disabled_chime_does_not_play(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = AudioConfig(utterance_dir=tmp, listening_chimes_enabled=False)
-            with patch("wheatly.audio.chimes.play_audio") as play:
+            with patch("wheatley.audio.chimes.play_audio") as play:
                 play_listening_chime("start", cfg)
 
             play.assert_not_called()

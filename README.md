@@ -1,4 +1,4 @@
-# Wheatly
+# Wheatley
 
 Offline-first talking AI foundation for a small Wheatley-style robot and other local personas.
 
@@ -13,19 +13,19 @@ microphone -> STT -> LLM -> tools -> streaming text -> TTS -> speaker
 Default profile:
 
 ```bash
-./scripts/start_wheatly.sh
+./scripts/start_wheatley.sh
 ```
 
 Equivalent:
 
 ```bash
-PYTHONPATH=src python3 -m wheatly voice
+PYTHONPATH=src python3 -m wheatley voice
 ```
 
 One text turn:
 
 ```bash
-PYTHONPATH=src python3 -m wheatly once --stream --text "hello"
+PYTHONPATH=src python3 -m wheatley once --stream --text "hello"
 ```
 
 ## Profiles
@@ -33,7 +33,7 @@ PYTHONPATH=src python3 -m wheatly once --stream --text "hello"
 Everything editable for a persona lives in one folder:
 
 ```text
-profiles/wheatly/
+profiles/wheatley/
   config.jsonc
   system.md
   user.md
@@ -47,7 +47,7 @@ profiles/wheatly/
 
 `config.jsonc` is the main file. It contains comments next to the settings, so prefer editing it over duplicating settings in docs.
 
-The default runtime uses `profiles/wheatly/config.jsonc`. Keep runtime choices in that config instead of passing startup flags. `memory.md` is explicit/manual memory; `auto_memory.md` is generated from the profile-local runtime log using rules in `memory_update.md` and `memory_consolidate.md`.
+The default runtime uses `profiles/wheatley/config.jsonc`. Keep runtime choices in that config instead of passing startup flags. `memory.md` is explicit/manual memory; `auto_memory.md` is generated from the profile-local runtime log using rules in `memory_update.md` and `memory_consolidate.md`.
 
 ## Useful Commands
 
@@ -75,7 +75,7 @@ local STT model for the active language.
 Run the STT server on a stronger Mac:
 
 ```bash
-PYTHONPATH=src python3 -m wheatly stt-server \
+PYTHONPATH=src python3 -m wheatley stt-server \
   --host 0.0.0.0 \
   --port 8765 \
   --default-model small.en \

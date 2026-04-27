@@ -3,7 +3,7 @@ import threading
 import time
 import unittest
 
-from wheatly.audio.playback import (
+from wheatley.audio.playback import (
     current_playback_age_seconds,
     run_playback_command,
     stop_audio_playback,
