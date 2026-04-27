@@ -27,6 +27,15 @@ Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 
 - Keep docs updated when model, hardware, latency, or tool decisions change.
 - Do not commit downloaded model weights into this repo. Use `models/`, which is ignored.
 
+## Concurrent Editing Policy (High Priority)
+
+- The user may edit files while the agent is working. This is expected normal workflow.
+- Treat the latest on-disk user edits as the source of truth and adapt to them.
+- Do not stop, panic, or escalate only because files changed during execution.
+- Re-read changed files, merge with current intent, and continue the task.
+- Never revert or discard user edits unless the user explicitly asks for that.
+- If there is a true ambiguity that cannot be resolved from files, ask one concise question and continue.
+
 ## Preferred Defaults
 
 - LLM: Qwen3.5-4B Q4/Q5 for first real local model.

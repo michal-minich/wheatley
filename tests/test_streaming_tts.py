@@ -1,7 +1,8 @@
 import unittest
 import threading
+import time
 
-from wheatly.tts.base import SpeechResult, TTSBackend
+from wheatly.tts.base import PreparedSpeech, SpeechResult, TTSBackend
 from wheatly.tts.streaming import StreamingSpeaker
 
 
@@ -12,6 +13,34 @@ class RecordingTTS(TTSBackend):
     def speak(self, text: str) -> SpeechResult:
         self.spoken.append(text)
         return SpeechResult(audio_path=None, spoken=True)
+
+
+class PipelinedRecordingTTS(TTSBackend):
+    def __init__(self):
+        self.prepare_started: dict[str, float] = {}
+        self.prepare_finished: dict[str, float] = {}
+        self.play_started: dict[str, float] = {}
+        self.play_finished: dict[str, float] = {}
+        self.played: list[str] = []
+
+    def supports_stream_pipelining(self) -> bool:
+        return True
+
+    def prepare_for_playback(self, text: str) -> PreparedSpeech:
+        self.prepare_started[text] = time.perf_counter()
+        time.sleep(0.03)
+        self.prepare_finished[text] = time.perf_counter()
+        return PreparedSpeech(text=text, audio_path=None)
+
+    def play_prepared(self, prepared: PreparedSpeech) -> bool:
+        self.play_started[prepared.text] = time.perf_counter()
+        if not self.played:
+            time.sleep(0.18)
+        else:
+            time.sleep(0.02)
+        self.play_finished[prepared.text] = time.perf_counter()
+        self.played.append(prepared.text)
+        return True
 
 
 class StreamingSpeakerTests(unittest.TestCase):
@@ -45,6 +74,37 @@ class StreamingSpeakerTests(unittest.TestCase):
 
         self.assertEqual(tts.spoken[0], "one two three four")
 
+    def test_inter_chunk_wait_emits_feedback_chunk_without_reaching_min_words(self):
+        tts = RecordingTTS()
+        with StreamingSpeaker(
+            tts,
+            enabled=True,
+            min_words=10,
+            max_words=60,
+            initial_min_words=2,
+            feedback_min_words=3,
+            max_initial_wait_seconds=0.0,
+            max_inter_chunk_wait_seconds=0.0,
+        ) as speaker:
+            speaker.feed("one two three four five six")
+
+        self.assertEqual(tts.spoken, ["one two three", "four five six"])
+
+    def test_timeout_prefers_complete_short_sentence_over_mid_sentence_split(self):
+        tts = RecordingTTS()
+        with StreamingSpeaker(
+            tts,
+            enabled=True,
+            min_words=24,
+            max_words=60,
+            initial_min_words=24,
+            feedback_min_words=14,
+            max_initial_wait_seconds=0.0,
+        ) as speaker:
+            speaker.feed("One plus one equals two. Then we keep going with more words.")
+
+        self.assertEqual(tts.spoken[0], "One plus one equals two.")
+
     def test_stop_event_prevents_queued_speech(self):
         tts = RecordingTTS()
         stop_event = threading.Event()
@@ -59,6 +119,25 @@ class StreamingSpeakerTests(unittest.TestCase):
             speaker.feed("one two three four")
 
         self.assertEqual(tts.spoken, [])
+
+    def test_pipeline_prepares_next_chunk_while_current_chunk_is_playing(self):
+        tts = PipelinedRecordingTTS()
+        with StreamingSpeaker(
+            tts,
+            enabled=True,
+            min_words=2,
+            max_words=2,
+            initial_min_words=2,
+            playback_prebuffer_chunks=1,
+            playback_prebuffer_max_wait_seconds=0.0,
+        ) as speaker:
+            speaker.feed("one two three four")
+
+        self.assertEqual(tts.played, ["one two", "three four"])
+        self.assertLess(
+            tts.prepare_started["three four"],
+            tts.play_finished["one two"],
+        )
 
 
 if __name__ == "__main__":

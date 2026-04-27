@@ -1,5 +1,7 @@
 .DS_Store
 .venv/
+.env
+.env.local
 __pycache__/
 *.pyc
 *.egg-info/
@@ -15,4 +17,7 @@ runtime/**/*.aiff
 runtime/**/*.mp3
 runtime/**/*.jsonl
 runtime/**/*.json
+profiles/*/runtime/
+profiles/*/memory.md
+profiles/*/auto_memory.md
 models/

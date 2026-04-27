@@ -11,9 +11,10 @@ from wheatly.jsonc import load_jsonc
 
 @dataclass
 class RuntimeConfig:
-    data_dir: str = "runtime"
-    turn_log: str = "runtime/logs/turns.jsonl"
-    state_dir: str = "runtime/state"
+    data_dir: str = "profiles/wheatly/runtime"
+    turn_log: str = "profiles/wheatly/runtime/logs/turns.jsonl"
+    tool_log: str = "profiles/wheatly/runtime/logs/tools.jsonl"
+    state_dir: str = "profiles/wheatly/runtime/state"
     default_language: str = "en"
 
 
@@ -27,7 +28,7 @@ class AudioConfig:
     trailing_silence_keep_seconds: float = 0.6
     max_utterance_seconds: float = 45.0
     max_wait_seconds: float = 30.0
-    utterance_dir: str = "runtime/audio"
+    utterance_dir: str = "profiles/wheatly/runtime/audio"
     partial_transcript_enabled: bool = True
     partial_transcript_interval_seconds: float = 1.1
     partial_transcript_min_audio_seconds: float = 1.2
@@ -44,6 +45,7 @@ class AudioConfig:
     speech_interrupt_pre_roll_seconds: float = 0.35
     speech_interrupt_record_seconds: float = 0.9
     speech_interrupt_max_words: int = 4
+    speech_interrupt_pause_tts_while_verifying: bool = False
 
 
 @dataclass
@@ -56,6 +58,12 @@ class STTConfig:
     whisper_cpp_binary: str = "whisper-cli"
     whisper_cpp_model: str = "models/whisper/ggml-small.en.bin"
     whisper_cpp_args: List[str] = field(default_factory=lambda: ["--no-timestamps"])
+    remote_base_url: str = "http://jankas-mac-mini.local:8765/v1"
+    remote_api_key: str = "EMPTY"
+    remote_model: str = ""
+    remote_probe_timeout_seconds: float = 0.4
+    remote_request_timeout_seconds: float = 20.0
+    remote_fallback_backend: str = "faster_whisper"
 
 
 @dataclass
@@ -66,6 +74,7 @@ class LanguageOptionConfig:
     audio_partial_transcript_use_as_final: Optional[bool] = None
     stt_model: Optional[str] = "small.en"
     stt_language: Optional[str] = "en"
+    remote_stt_model: Optional[str] = None
     tts_backend: Optional[str] = None
     tts_voice: Optional[str] = "Daniel"
     tts_piper_model: Optional[str] = "models/piper/en_GB-alan-medium.onnx"
@@ -87,6 +96,9 @@ class LanguageOptionConfig:
     tts_stream_max_words: Optional[int] = None
     tts_stream_feedback_min_words: Optional[int] = None
     tts_stream_max_initial_wait_seconds: Optional[float] = None
+    tts_stream_max_inter_chunk_wait_seconds: Optional[float] = None
+    tts_stream_playback_prebuffer_chunks: Optional[int] = None
+    tts_stream_playback_prebuffer_max_wait_seconds: Optional[float] = None
     confirmation: str = "Hi"
     online_model_message: Optional[str] = None
     offline_model_message: Optional[str] = None
@@ -104,6 +116,7 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             audio_partial_transcript_use_as_final=True,
             stt_model="small.en",
             stt_language="en",
+            remote_stt_model="small.en",
             tts_backend="piper",
             tts_voice="Daniel",
             tts_piper_model="models/piper/en_GB-alan-medium.onnx",
@@ -114,11 +127,14 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             tts_volume=1.05,
             tts_leading_silence_ms=0,
             tts_stream_speech=True,
-            tts_stream_initial_min_words=5,
-            tts_stream_min_words=18,
+            tts_stream_initial_min_words=3,
+            tts_stream_min_words=14,
             tts_stream_max_words=70,
-            tts_stream_feedback_min_words=10,
-            tts_stream_max_initial_wait_seconds=0.35,
+            tts_stream_feedback_min_words=6,
+            tts_stream_max_initial_wait_seconds=0.25,
+            tts_stream_max_inter_chunk_wait_seconds=0.55,
+            tts_stream_playback_prebuffer_chunks=2,
+            tts_stream_playback_prebuffer_max_wait_seconds=0.35,
             confirmation="Hi",
             online_model_message="using smarter online model",
             offline_model_message="using offline model",
@@ -144,6 +160,7 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             audio_partial_transcript_use_as_final=False,
             stt_model="models/whisper/whisper-large-v3-turbo-sk-ct2-int8",
             stt_language="sk",
+            remote_stt_model="models/whisper/whisper-large-v3-sk-ct2-int8",
             tts_backend="edge_tts",
             tts_voice="sk-SK-LukasNeural",
             tts_piper_model="models/piper/sk_SK-lili-medium.onnx",
@@ -157,12 +174,15 @@ def _default_language_options() -> Dict[str, LanguageOptionConfig]:
             tts_sentence_silence=0.04,
             tts_volume=1.05,
             tts_leading_silence_ms=80,
-            tts_stream_speech=False,
-            tts_stream_initial_min_words=8,
-            tts_stream_min_words=26,
+            tts_stream_speech=True,
+            tts_stream_initial_min_words=3,
+            tts_stream_min_words=14,
             tts_stream_max_words=90,
-            tts_stream_feedback_min_words=12,
-            tts_stream_max_initial_wait_seconds=0.8,
+            tts_stream_feedback_min_words=6,
+            tts_stream_max_initial_wait_seconds=0.35,
+            tts_stream_max_inter_chunk_wait_seconds=0.7,
+            tts_stream_playback_prebuffer_chunks=2,
+            tts_stream_playback_prebuffer_max_wait_seconds=0.35,
             confirmation="Ahoj",
             online_model_message="Používam múdrejší online model.",
             offline_model_message="Používam offline model.",
@@ -237,7 +257,7 @@ class TTSConfig:
     backend: str = "auto"
     enabled: bool = False
     voice: str = "Daniel"
-    output_dir: str = "runtime/audio"
+    output_dir: str = "profiles/wheatly/runtime/audio"
     playback: bool = True
     playback_command: Optional[List[str]] = None
     piper_binary: str = "piper"
@@ -256,11 +276,14 @@ class TTSConfig:
     leading_silence_ms: int = 0
     stream_speech: bool = True
     adaptive_streaming: bool = True
-    stream_initial_min_words: int = 5
-    stream_min_words: int = 18
+    stream_initial_min_words: int = 3
+    stream_min_words: int = 14
     stream_max_words: int = 70
-    stream_feedback_min_words: int = 10
-    stream_max_initial_wait_seconds: float = 0.35
+    stream_feedback_min_words: int = 6
+    stream_max_initial_wait_seconds: float = 0.25
+    stream_max_inter_chunk_wait_seconds: float = 0.55
+    stream_playback_prebuffer_chunks: int = 2
+    stream_playback_prebuffer_max_wait_seconds: float = 0.35
     external_command: Optional[List[str]] = None
     filter: FilterConfig = field(default_factory=FilterConfig)
 
@@ -270,6 +293,18 @@ class ToolConfig:
     enabled: bool = True
     allowed_commands: Dict[str, List[str]] = field(default_factory=dict)
     photo_command: Optional[List[str]] = None
+    web_search_enabled: bool = False
+    web_search_provider: str = "brave"
+    web_search_endpoint: str = ""
+    web_search_api_key_env: str = "BRAVE_SEARCH_API_KEY"
+    web_search_max_results: int = 5
+    web_search_timeout_seconds: float = 5.0
+    web_fetch_enabled: bool = False
+    web_fetch_timeout_seconds: float = 8.0
+    web_fetch_max_bytes: int = 1000000
+    web_fetch_max_chars: int = 12000
+    web_fetch_allow_private_networks: bool = False
+    web_fetch_user_agent: str = "Wheatly/0.1 local voice assistant"
 
 
 @dataclass
@@ -288,7 +323,25 @@ class AgentConfig:
 
 
 @dataclass
+class MemoryConfig:
+    auto_enabled: bool = True
+    include_assistant_text_online: bool = True
+    include_assistant_text_offline: bool = False
+    full_rewrite_interval_days: float = 1.0
+    full_rewrite_requires_online: bool = True
+    full_rewrite_recent_days: int = 14
+    max_turns_per_update: int = 12
+    max_candidates_for_rewrite: int = 240
+    max_total_words: int = 700
+    max_stable_facts: int = 12
+    max_preferences: int = 10
+    max_current_projects: int = 8
+    max_recent_context: int = 8
+
+
+@dataclass
 class Config:
+    profile_dir: str = "profiles/wheatly"
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     stt: STTConfig = field(default_factory=STTConfig)
@@ -298,6 +351,7 @@ class Config:
     tools: ToolConfig = field(default_factory=ToolConfig)
     prompts: PromptConfig = field(default_factory=PromptConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
 
     def ensure_dirs(self) -> None:
         for path in [
@@ -306,6 +360,7 @@ class Config:
             self.audio.utterance_dir,
             self.tts.output_dir,
             str(Path(self.runtime.turn_log).parent),
+            str(Path(self.runtime.tool_log).parent),
             str(Path(self.prompts.system_path).parent),
             str(Path(self.prompts.user_path).parent),
             str(Path(self.prompts.tools_path).parent),
@@ -339,7 +394,9 @@ def load_config(path: Optional[str] = None, profile: Optional[str] = None) -> Co
         config_file = Path(config_path)
         raw = load_jsonc(config_file)
         cfg = _apply_dict(cfg, raw)
+        cfg.profile_dir = str(config_file.parent)
         _resolve_profile_paths(cfg, config_file.parent)
+        _migrate_legacy_profile_runtime(cfg, config_file.parent.name)
 
     cfg.ensure_dirs()
     return cfg
@@ -353,6 +410,7 @@ def _apply_dict(cfg: Config, raw: Dict[str, Any]) -> Config:
     data = cfg.to_dict()
     _deep_update(data, raw)
     return Config(
+        profile_dir=data.get("profile_dir", cfg.profile_dir),
         runtime=RuntimeConfig(**data["runtime"]),
         audio=AudioConfig(**data["audio"]),
         stt=STTConfig(**data["stt"]),
@@ -372,6 +430,7 @@ def _apply_dict(cfg: Config, raw: Dict[str, Any]) -> Config:
         tools=ToolConfig(**data["tools"]),
         prompts=PromptConfig(**data["prompts"]),
         agent=AgentConfig(**data["agent"]),
+        memory=MemoryConfig(**data.get("memory", {})),
     )
 
 
@@ -411,3 +470,14 @@ def _resolve_relative(path: str, base_dir: Path) -> str:
     if len(raw.parts) > 1 and raw.parts[0] in {"profiles", "prompts", "memory"}:
         return str(raw)
     return str(base_dir / raw)
+
+
+def _migrate_legacy_profile_runtime(cfg: Config, profile_name: str) -> None:
+    target = Path(cfg.profile_dir) / "runtime"
+    legacy = Path("runtime") / profile_name
+    if target.exists() or not legacy.exists():
+        return
+    try:
+        shutil.copytree(legacy, target)
+    except OSError:
+        pass

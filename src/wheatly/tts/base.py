@@ -11,7 +11,22 @@ class SpeechResult:
     spoken: bool
 
 
+@dataclass
+class PreparedSpeech:
+    text: str
+    audio_path: Optional[Path]
+
+
 class TTSBackend:
     def speak(self, text: str) -> SpeechResult:
         raise NotImplementedError
 
+    def supports_stream_pipelining(self) -> bool:
+        return False
+
+    def prepare_for_playback(self, text: str) -> PreparedSpeech:
+        raise RuntimeError("prepare_for_playback is not implemented for this backend")
+
+    def play_prepared(self, prepared: PreparedSpeech) -> bool:
+        del prepared
+        return False

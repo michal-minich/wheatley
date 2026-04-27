@@ -9,7 +9,7 @@ from wheatly.config import AudioConfig
 
 
 CHIME_SAMPLE_RATE = 44100
-CHIME_VERSION = 2
+CHIME_VERSION = 3
 
 
 def play_listening_chime(event: str, cfg: AudioConfig) -> None:
@@ -31,7 +31,7 @@ def ensure_listening_chime(event: str, cfg: AudioConfig) -> Path:
     if event == "start":
         audio = _render_chime(392.0, 659.25, 0.36, cfg.listening_chime_volume)
     elif event == "stop":
-        audio = _render_deep_gong(293.66, 146.83, 0.78, cfg.listening_chime_volume)
+        audio = _render_deep_gong(293.66, 146.83, 0.46, cfg.listening_chime_volume)
     else:
         raise ValueError(f"Unknown listening chime event: {event}")
     with wave.open(str(path), "wb") as handle:

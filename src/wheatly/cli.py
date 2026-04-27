@@ -14,11 +14,17 @@ from pathlib import Path
 from wheatly.audio.chimes import play_listening_chime
 from wheatly.config import load_config
 from wheatly.doctor import diagnostics_json
-from wheatly.language import match_language_switch
+from wheatly.language import (
+    apply_configured_language,
+    match_language_switch,
+    read_language_state,
+)
 from wheatly.pipeline import VoiceAgent
 from wheatly.runtime_stats import LatencyStats
 from wheatly.stt.microphone import MicrophoneRecorder
 from wheatly.stt.base import Transcription
+from wheatly.tools.audit import log_tool_event
+from wheatly.tools.announcements import tool_start_message
 from wheatly.tools.builtins import build_registry
 from wheatly.tts.backends import build_tts
 
@@ -61,6 +67,15 @@ def main(argv: list[str] | None = None) -> int:
     transcribe = sub.add_parser("transcribe", help="Transcribe an audio file.")
     transcribe.add_argument("audio_path")
 
+    stt_server = sub.add_parser("stt-server", help="Serve remote STT over HTTP.")
+    stt_server.add_argument("--host", default="0.0.0.0")
+    stt_server.add_argument("--port", type=int, default=8765)
+    stt_server.add_argument("--backend", default="faster_whisper")
+    stt_server.add_argument("--default-model", default="small.en")
+    stt_server.add_argument("--model", action="append", default=[], help="language=model")
+    stt_server.add_argument("--device", default="cpu")
+    stt_server.add_argument("--compute-type", default="int8")
+
     listen = sub.add_parser("listen", help="Record one utterance, transcribe and answer.")
     listen.add_argument("--speak", action="store_true", help="Speak the response.")
 
@@ -70,6 +85,28 @@ def main(argv: list[str] | None = None) -> int:
     voice.add_argument("--no-stream", action="store_true", help="Disable token streaming.")
 
     args = parser.parse_args(argv)
+
+    if args.command == "stt-server":
+        from wheatly.stt.server import main as stt_server_main
+
+        server_args = [
+            "--host",
+            args.host,
+            "--port",
+            str(args.port),
+            "--backend",
+            args.backend,
+            "--default-model",
+            args.default_model,
+            "--device",
+            args.device,
+            "--compute-type",
+            args.compute_type,
+        ]
+        for model in args.model:
+            server_args.extend(["--model", model])
+        return stt_server_main(server_args)
+
     cfg = load_config()
 
     if args.command == "doctor":
@@ -95,12 +132,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "tool":
         from wheatly.tools.registry import ToolCall
 
+        apply_configured_language(cfg, read_language_state(cfg))
         registry = build_registry(cfg)
         try:
             tool_args = json.loads(args.args)
         except json.JSONDecodeError as exc:
             raise SystemExit(f"Invalid JSON for --args: {exc}") from exc
-        result = registry.execute(ToolCall(args.name, tool_args))
+        call = ToolCall(args.name, tool_args)
+        message = tool_start_message(cfg, call.name)
+        if message:
+            _print_tool_start(call.name, message)
+        started_at = time.perf_counter()
+        result = registry.execute(call)
+        log_tool_event(
+            cfg.runtime.tool_log,
+            call,
+            result,
+            source="cli",
+            duration_seconds=time.perf_counter() - started_at,
+        )
         print(json.dumps(result.__dict__, indent=2, default=str))
         return 0
 
@@ -109,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
         build_tts(cfg).speak(args.text)
         return 0
 
-    agent = VoiceAgent(cfg)
+    agent = VoiceAgent(cfg, on_tool_start=_print_tool_start)
 
     if args.command == "once":
         if args.speak:
@@ -144,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         partial_transcriber = _build_partial_transcriber(agent, cfg)
         audio_path = (
             Path(cfg.audio.utterance_dir)
-            / f"utterance_{int(__import__('time').time())}.wav"
+            / f"utterance_{time.time_ns()}.wav"
         )
         print(_color("listening...", "green"))
         play_listening_chime("start", cfg.audio)
@@ -188,20 +238,20 @@ def _chat_loop(agent: VoiceAgent, speak: bool, stream: bool) -> int:
         if _is_exit_command(text):
             return 0
         if _is_new_chat_command(text):
-            selection = agent.reset_chat()
-            message = "Starting a new chat."
-            _print_turn(message)
-            _print_model_selection(selection)
-            if speak:
-                agent.tts.speak(message)
-                agent.tts.speak(selection.message)
+            _start_new_chat(agent, speak=speak)
             continue
         _handle_text_turn(agent, text, speak=speak, stream=stream)
 
 
 def _handle_text_turn(agent: VoiceAgent, text: str, speak: bool, stream: bool) -> None:
-    if stream and not match_language_switch(agent.cfg, text):
-        result = _print_streamed_turn(agent, text, speak=speak)
+    speech_stream = speak and agent.cfg.tts.stream_speech
+    if (stream or speech_stream) and not match_language_switch(agent.cfg, text):
+        result = _print_streamed_turn(
+            agent,
+            text,
+            speak=speak,
+            print_tokens=stream,
+        )
         if _is_language_switch_result(result):
             _print_language_turn(result.assistant_text)
         return
@@ -221,18 +271,30 @@ def _print_language_turn(text: str) -> None:
     _print_turn(text, name="language", color="blue")
 
 
-def _print_streamed_turn(agent: VoiceAgent, text: str, speak: bool):
+def _print_tool_start(tool_name: str, message: str) -> None:
+    del tool_name
+    sys.stdout.write(f"{_color(f'tool> {message}', 'cyan')}\n")
+    sys.stdout.flush()
+
+
+def _print_streamed_turn(agent: VoiceAgent, text: str, speak: bool, print_tokens: bool = True):
     printed_prefix = False
 
     def on_token(token: str) -> None:
         nonlocal printed_prefix
+        if not print_tokens:
+            return
         if not printed_prefix:
             sys.stdout.write(_prefix("wheatly", "orange"))
             printed_prefix = True
         sys.stdout.write(token)
         sys.stdout.flush()
 
-    result = agent.handle_text_stream(text, speak=speak, on_token=on_token)
+    result = agent.handle_text_stream(
+        text,
+        speak=speak,
+        on_token=on_token if print_tokens else None,
+    )
     if printed_prefix:
         sys.stdout.write("\n")
     elif result.assistant_text and not _is_language_switch_result(result):
@@ -274,7 +336,7 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
         try:
             audio_path = (
                 Path(cfg.audio.utterance_dir)
-                / f"utterance_{int(time.time())}_{count + 1}.wav"
+                / f"utterance_{time.time_ns()}_{count + 1}.wav"
             )
             print(_color("listening...", "green"))
             play_listening_chime("start", cfg.audio)
@@ -290,13 +352,7 @@ def _voice_loop(agent: VoiceAgent, cfg, speak: bool, turns: int, stream: bool) -
             if _is_exit_command(text):
                 return 0
             if _is_new_chat_command(text):
-                selection = agent.reset_chat()
-                message = "Starting a new chat."
-                _print_turn(message)
-                _print_model_selection(selection)
-                if speak:
-                    agent.tts.speak(message)
-                    agent.tts.speak(selection.message)
+                _start_new_chat(agent, speak=speak)
                 count += 1
                 continue
             if stream:
@@ -460,15 +516,38 @@ def _format_preview_block(prefix_name: str, color: str, text: str) -> list[str]:
 
 
 def _announce_model_selection(agent: VoiceAgent, speak: bool) -> None:
-    selection = agent.reset_chat()
+    selection = agent.reset_chat(refresh_memory=False)
     _print_model_selection(selection)
     if speak:
         agent.tts.speak(selection.message)
+    agent.refresh_auto_memory(
+        notify_memory=_print_memory_status,
+        speak_memory=speak,
+    )
+
+
+def _start_new_chat(agent: VoiceAgent, speak: bool) -> None:
+    selection = agent.reset_chat(refresh_memory=False)
+    message = "Starting a new chat."
+    _print_turn(message)
+    _print_model_selection(selection)
+    if speak:
+        agent.tts.speak(message)
+        agent.tts.speak(selection.message)
+    agent.refresh_auto_memory(
+        notify_memory=_print_memory_status,
+        speak_memory=speak,
+    )
 
 
 def _print_model_selection(selection) -> None:
     color = "cyan" if selection.mode == "online" else "magenta"
     sys.stdout.write(f"{_color('model> ', color)}{selection.message}\n")
+    sys.stdout.flush()
+
+
+def _print_memory_status(message: str) -> None:
+    sys.stdout.write(f"{_color('memory> ', 'blue')}{message}\n")
     sys.stdout.flush()
 
 

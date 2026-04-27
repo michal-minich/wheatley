@@ -56,6 +56,20 @@
       "description": "Run one whitelisted local command by name.",
       // When and how the model should use it.
       "instructions": "Use this only for commands explicitly listed in configuration. Never request raw shell access."
+    },
+    // Provider-backed public web search.
+    "web_search": {
+      // What the model sees as the tool purpose.
+      "description": "Search the public web through the configured search provider and return titles, URLs, and snippets.",
+      // When and how the model should use it.
+      "instructions": "Use this for current events, prices, software releases, documentation that may have changed, product availability, or other facts likely to be stale. Do not use it for private memory or local robot state. Prefer one focused query, then fetch_url only for the most relevant result when more detail is needed."
+    },
+    // Public URL reader.
+    "fetch_url": {
+      // What the model sees as the tool purpose.
+      "description": "Fetch a known public HTTP(S) URL and return cleaned readable text in markdown-like format.",
+      // When and how the model should use it.
+      "instructions": "Use this only when the user gives a URL or after web_search returns a relevant result that needs source details. Do not fetch local, private-network, login, checkout, or account pages. Summarize with the page URL and mention when fetched text is truncated."
     }
   }
 }

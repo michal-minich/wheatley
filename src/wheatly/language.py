@@ -28,6 +28,8 @@ def apply_configured_language(cfg: Config, language: Optional[str] = None) -> st
     if option.stt_model is not None:
         cfg.stt.model = option.stt_model
     cfg.stt.language = option.stt_language
+    if option.remote_stt_model is not None:
+        cfg.stt.remote_model = option.remote_stt_model
     if option.tts_backend:
         cfg.tts.backend = option.tts_backend
     if option.tts_voice:
@@ -69,6 +71,18 @@ def apply_configured_language(cfg: Config, language: Optional[str] = None) -> st
     if option.tts_stream_max_initial_wait_seconds is not None:
         cfg.tts.stream_max_initial_wait_seconds = (
             option.tts_stream_max_initial_wait_seconds
+        )
+    if option.tts_stream_max_inter_chunk_wait_seconds is not None:
+        cfg.tts.stream_max_inter_chunk_wait_seconds = (
+            option.tts_stream_max_inter_chunk_wait_seconds
+        )
+    if option.tts_stream_playback_prebuffer_chunks is not None:
+        cfg.tts.stream_playback_prebuffer_chunks = (
+            option.tts_stream_playback_prebuffer_chunks
+        )
+    if option.tts_stream_playback_prebuffer_max_wait_seconds is not None:
+        cfg.tts.stream_playback_prebuffer_max_wait_seconds = (
+            option.tts_stream_playback_prebuffer_max_wait_seconds
         )
     return code
 
@@ -199,16 +213,22 @@ def language_status_payload(cfg: Config) -> dict:
     return _language_payload(code, option)
 
 
-def model_selection_message(cfg: Config, mode: str) -> str:
+def model_selection_message(cfg: Config, mode: str, stt_mode: str = "local") -> str:
     code = normalize_language_code(cfg, cfg.runtime.default_language)
     option = cfg.language.languages.get(code or "") if code else None
+    slovak = code == "sk" or (
+        option is not None and _normalize_text(option.response_language) == "slovak"
+    )
     if mode == "online":
         if option and option.online_model_message:
-            return option.online_model_message
-        return cfg.llm.remote.online_message
-    if option and option.offline_model_message:
-        return option.offline_model_message
-    return cfg.llm.remote.offline_message
+            base = option.online_model_message
+        else:
+            base = cfg.llm.remote.online_message
+    elif option and option.offline_model_message:
+        base = option.offline_model_message
+    else:
+        base = cfg.llm.remote.offline_message
+    return _model_stt_message(base, stt_mode, slovak=slovak)
 
 
 def online_llm_model(cfg: Config) -> str:
@@ -217,6 +237,20 @@ def online_llm_model(cfg: Config) -> str:
     if option and option.online_llm_model is not None:
         return option.online_llm_model
     return cfg.llm.remote.model
+
+
+def _model_stt_message(base: str, stt_mode: str, slovak: bool) -> str:
+    base = base.strip().rstrip(".!")
+    remote = stt_mode == "remote"
+    if slovak:
+        stt = (
+            "vzdialené rozpoznávanie reči"
+            if remote
+            else "lokálne rozpoznávanie reči"
+        )
+        return f"{base} a {stt}."
+    stt = "remote speech recognition" if remote else "local speech recognition"
+    return f"{base} and {stt}."
 
 
 def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
@@ -228,6 +262,7 @@ def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
         "audio_partial_transcript_use_as_final": option.audio_partial_transcript_use_as_final,
         "stt_model": option.stt_model,
         "stt_language": option.stt_language,
+        "remote_stt_model": option.remote_stt_model,
         "tts_backend": option.tts_backend,
         "tts_voice": option.tts_voice,
         "tts_piper_model": option.tts_piper_model,
@@ -238,6 +273,13 @@ def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
         "tts_stream_initial_min_words": option.tts_stream_initial_min_words,
         "tts_stream_min_words": option.tts_stream_min_words,
         "tts_stream_feedback_min_words": option.tts_stream_feedback_min_words,
+        "tts_stream_max_inter_chunk_wait_seconds": (
+            option.tts_stream_max_inter_chunk_wait_seconds
+        ),
+        "tts_stream_playback_prebuffer_chunks": option.tts_stream_playback_prebuffer_chunks,
+        "tts_stream_playback_prebuffer_max_wait_seconds": (
+            option.tts_stream_playback_prebuffer_max_wait_seconds
+        ),
         "confirmation": option.confirmation,
         "online_model_message": option.online_model_message,
         "offline_model_message": option.offline_model_message,

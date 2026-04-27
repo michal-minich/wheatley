@@ -155,14 +155,20 @@ Current behavior:
 - Partial microphone transcript is shown as a rewriting yellow `you~>` preview when enabled.
 - Normal answer text streams to terminal.
 - TTS begins after the first usable phrase or chunk.
+- Speech uses the streaming path whenever speaking is enabled and `tts.stream_speech` is true, even if terminal token streaming is off.
+- English and Slovak both stream speech; Slovak Edge TTS may have small chunk gaps, but early audible feedback is preferred.
 - During TTS playback, a separate high-threshold interrupt monitor can stop speech when the user loudly says `stop`.
+- Interrupt candidate verification now defaults to background mode (`speech_interrupt_pause_tts_while_verifying: false`) so false positives do not pause chunk playback.
 - The first TTS chunk is adaptive, based on persisted LLM/TTS speed stats.
 - The first chunk has its own lower word threshold so startup can be quicker than mid-answer chunking.
 - `stream_max_initial_wait_seconds` prevents slow hardware from waiting too long before audible feedback.
+- `stream_max_inter_chunk_wait_seconds` does the same for later chunks: if chunking would wait too long for `stream_min_words`, it emits a shorter `stream_feedback_min_words` chunk.
+- For Piper/Edge/external TTS, streaming now runs as a prepare+play pipeline so the next chunk can synthesize while the current chunk is playing.
+- Startup playback can use a small prebuffer (`stream_playback_prebuffer_chunks`, bounded by `stream_playback_prebuffer_max_wait_seconds`) to reduce immediate underruns without waiting for the whole answer.
 
-## D11: Keep Tools Local
+## D11: Keep Tools Whitelisted
 
-Decision: no internet tool in the current default, and notes search is removed from the active registry.
+Decision: internet access is allowed only through explicit, whitelisted web tools. Notes search remains removed from the active registry.
 
 Active tools:
 
@@ -174,8 +180,14 @@ Active tools:
 - `set_language`
 - `take_photo` only if configured
 - `run_safe_cli_tool` only for explicitly allowed commands
+- `web_search` only if enabled and backed by a configured provider
+- `fetch_url` only if enabled; private/local network addresses are blocked by default
 
 Calculator uses an AST-based math evaluator, not Python `eval`.
+
+`web_search` uses provider APIs such as Brave Search, SearXNG, or Tavily rather than scraping search engine HTML. `fetch_url` directly fetches a known HTTP(S) page and strips unnecessary markup into readable text/markdown-like output. Search and fetch are separate so the robot can search quickly without downloading full pages, then inspect only a chosen source when needed.
+
+Before selected tools start, the CLI prints a colored `tool>` status and speech mode says a short active-language cue: `Remembering...` / `Zapamätávam...`, `Running...` / `Spúšťam...`, `Searching...` / `Hľadám...`, or `Downloading...` / `Sťahujem...`.
 
 ## D12: Editable Prompts And Injected Memory
 
@@ -188,7 +200,19 @@ Files:
 - `profiles/wheatly/tools.jsonc`
 - `profiles/wheatly/memory.md`
 
-The `remember` tool appends short facts to the active profile memory. Memory is injected into the system prompt on every turn, so the model does not need a separate retrieval command to use it. `Start a new chat.` clears conversation history but keeps the editable prompts and persistent memory.
+The `remember` tool appends short facts to the active profile memory. Manual memory is injected into the system prompt on every turn, so the model does not need a separate retrieval command to use it. `Start a new chat.` clears conversation history but keeps the editable prompts and persistent memory.
+
+Automatic conversation-derived memory is separate:
+
+- `memory.md` remains manual and `remember`-managed.
+- `auto_memory.md` is generated from `runtime/logs/turns.jsonl`.
+- `memory_update.md` contains editable incremental update instructions.
+- `memory_consolidate.md` contains editable full consolidation instructions.
+- `runtime/state/memory_state.json` tracks processed log offsets and rewrite cadence.
+- `runtime/state/memory_candidates.jsonl` stores compact evidence for full consolidation.
+- `runtime/logs/tools.jsonl` records each tool request, result, source, and duration for debugging.
+
+Quick updates run from turns newer than the last memory update at startup/new chat. Full consolidation is interval-based and requires the online model by default. Raw turn logs are append-only, include per-turn active LLM `model_name`, and are never deleted by memory maintenance.
 
 ## D13: Profile Folder Layout
 
@@ -209,8 +233,8 @@ Reasoning:
 
 - Small STT and LLM models behave better with a strong language hint.
 - English mode can keep `small.en` for latency.
-- Slovak mode uses multilingual Whisper `medium` with `sk` language hint for quality.
-- The LLM model stays the same; only prompt hint, STT model/language, and TTS voice change.
+- Slovak mode uses a stronger Slovak STT model than English.
+- The LLM model stays language-selectable only through the existing online/offline model selection; language switching also updates prompt hint, STT model/language, remote STT model, and TTS voice.
 
 Current behavior:
 
@@ -218,3 +242,23 @@ Current behavior:
 - `switch to English`, `speak English`, `hovor po anglicky`, and `prepni na anglictinu` switch to English.
 - `switch language` and `prepni jazyk` switch based on the language of the command; if already active, they toggle to the previous or next configured language.
 - Switching prints a blue `language>` line and speaks only `Ahoj` or `Hi`.
+
+## D15: Remote STT Is Independent From Remote LLM
+
+Decision: support remote STT fallback separately from remote LLM fallback.
+
+Reasoning:
+
+- A robot body can stay within an 8 GB class memory budget by offloading large Slovak STT when Janka Mac is reachable.
+- English STT quality is already sufficient with `small.en`, so remote English STT should optimize for speed rather than larger models.
+- Slovak STT quality benefits from using a CTranslate2 conversion of the full `NaiveNeuron/whisper-large-v3-sk` model remotely, while keeping the existing turbo model as local fallback.
+- The robot should still work if only one remote service is available: STT remote with local LLM, local STT with remote LLM, both remote, or both local.
+
+Current behavior:
+
+- `stt.backend` is `remote_fallback`.
+- The remote endpoint is `http://jankas-mac-mini.local:8765/v1`.
+- English remote STT requests `small.en`.
+- Slovak remote STT requests `models/whisper/whisper-large-v3-sk-ct2-int8`.
+- Local fallback uses `stt.remote_fallback_backend` and the active language's local `stt_model`.
+- The `model>` line announces all LLM/STT availability combinations in the active language, for example online LLM plus remote STT, online LLM plus local STT, offline LLM plus remote STT, or fully local fallback.

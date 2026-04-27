@@ -18,6 +18,7 @@ def build_system_prompt(cfg: Config, tools: ToolRegistry) -> str:
     )
     user = _read_text(Path(cfg.prompts.user_path)).strip()
     memory = _read_text(Path(cfg.prompts.memory_path)).strip()
+    auto_memory = _read_text(Path(cfg.profile_dir) / "auto_memory.md").strip()
     specs = [
         {
             "name": spec.name,
@@ -32,6 +33,8 @@ def build_system_prompt(cfg: Config, tools: ToolRegistry) -> str:
         parts.append("# User Instructions\n" + _render_template(user, cfg))
     if memory:
         parts.append("# Persistent Memory\n" + memory)
+    if cfg.memory.auto_enabled and auto_memory:
+        parts.append("# Conversation-Derived Memory\n" + auto_memory)
     parts.append("# Available Tools\n" + json.dumps(specs, ensure_ascii=True))
     return "\n\n".join(parts)
 

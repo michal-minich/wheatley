@@ -15,6 +15,7 @@ from wheatly.config import Config
 from wheatly.language import language_status_payload, set_language_state
 from wheatly.prompting import load_tool_overrides
 from wheatly.tools.registry import ToolRegistry, ToolResult, ToolSpec
+from wheatly.tools.web import fetch_url, web_search
 
 STARTED_AT = time.time()
 
@@ -131,6 +132,37 @@ def build_registry(cfg: Config) -> ToolRegistry:
         ),
         lambda args: _run_safe_cli_tool(cfg, args),
     )
+    if cfg.tools.web_search_enabled:
+        registry.register(
+            ToolSpec(
+                name="web_search",
+                description="Search the public web through the configured search provider.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "max_results": {"type": "integer"},
+                    },
+                    "required": ["query"],
+                },
+            ),
+            lambda args: web_search(cfg, args),
+        )
+    if cfg.tools.web_fetch_enabled:
+        registry.register(
+            ToolSpec(
+                name="fetch_url",
+                description="Fetch a public HTTP(S) URL and return cleaned readable text.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"},
+                    },
+                    "required": ["url"],
+                },
+            ),
+            lambda args: fetch_url(cfg, args),
+        )
 
     for name, override in load_tool_overrides(cfg.prompts.tools_path).items():
         registry.update_spec(

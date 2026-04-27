@@ -21,10 +21,13 @@ from wheatly.language import (
 )
 from wheatly.llm.backends import build_llm, remote_llm_available
 from wheatly.llm.base import LLMBackend, LLMMessage
+from wheatly.memory import refresh_auto_memory
 from wheatly.prompting import build_system_prompt
 from wheatly.runtime_stats import LatencyStats
-from wheatly.stt.backends import build_stt
+from wheatly.stt.backends import build_stt, remote_stt_available
 from wheatly.stt.base import STTBackend, Transcription
+from wheatly.tools.audit import log_tool_event
+from wheatly.tools.announcements import tool_start_message
 from wheatly.tools.builtins import build_registry
 from wheatly.tools.parser import parse_tool_calls
 from wheatly.tools.registry import ToolCall, ToolRegistry, ToolResult
@@ -45,6 +48,7 @@ class TurnResult:
 class ModelSelection:
     mode: str
     message: str
+    stt_mode: str = "local"
 
 
 class VoiceAgent:
@@ -55,6 +59,7 @@ class VoiceAgent:
         stt: Optional[STTBackend] = None,
         tts: Optional[TTSBackend] = None,
         tools: Optional[ToolRegistry] = None,
+        on_tool_start: Optional[Callable[[str, str], None]] = None,
     ):
         self.cfg = cfg
         apply_configured_language(self.cfg, read_language_state(self.cfg))
@@ -63,19 +68,33 @@ class VoiceAgent:
         self.stt = stt or build_stt(cfg.stt)
         self.tts = tts or build_tts(cfg)
         self.tools = tools or build_registry(cfg)
+        self.on_tool_start = on_tool_start
         self.latency_stats = LatencyStats(Path(cfg.runtime.state_dir) / "latency_stats.json")
         self.history: List[LLMMessage] = []
         self.model_selection = ModelSelection(
             "offline",
-            model_selection_message(self.cfg, "offline"),
+            model_selection_message(self.cfg, "offline", "local"),
+            "local",
         )
 
-    def reset_chat(self) -> ModelSelection:
+    def reset_chat(
+        self,
+        refresh_memory: bool = True,
+        notify_memory: Optional[Callable[[str], None]] = None,
+        speak_memory: bool = False,
+    ) -> ModelSelection:
         self.history.clear()
-        return self.select_chat_model()
+        selection = self.select_chat_model()
+        if refresh_memory:
+            self.refresh_auto_memory(
+                notify_memory=notify_memory,
+                speak_memory=speak_memory,
+            )
+        return selection
 
     def select_chat_model(self) -> ModelSelection:
         remote = self.cfg.llm.remote
+        stt_mode = self.select_stt_mode()
         if remote.enabled and remote_llm_available(remote):
             remote_cfg = replace(
                 self.cfg.llm,
@@ -88,15 +107,41 @@ class VoiceAgent:
             self.llm = build_llm(remote_cfg)
             self.model_selection = ModelSelection(
                 "online",
-                model_selection_message(self.cfg, "online"),
+                model_selection_message(self.cfg, "online", stt_mode),
+                stt_mode,
             )
             return self.model_selection
         self.llm = build_llm(self.cfg.llm)
         self.model_selection = ModelSelection(
             "offline",
-            model_selection_message(self.cfg, "offline"),
+            model_selection_message(self.cfg, "offline", stt_mode),
+            stt_mode,
         )
         return self.model_selection
+
+    def select_stt_mode(self) -> str:
+        backend = self.cfg.stt.backend.lower().replace("-", "_")
+        if backend not in {"remote", "remote_fallback"}:
+            return "local"
+        return "remote" if remote_stt_available(self.cfg.stt) else "local"
+
+    def refresh_auto_memory(
+        self,
+        notify_memory: Optional[Callable[[str], None]] = None,
+        speak_memory: bool = False,
+    ) -> None:
+        def emit(message: str) -> None:
+            if notify_memory:
+                notify_memory(message)
+            if speak_memory and self.cfg.tts.enabled:
+                self.tts.speak(message)
+
+        refresh_auto_memory(
+            self.cfg,
+            self.llm,
+            self.model_selection.mode,
+            notify=emit,
+        )
 
     def transcribe(self, audio_path: Optional[Path] = None) -> Transcription:
         with self.stt_lock:
@@ -120,7 +165,11 @@ class VoiceAgent:
 
         direct_tool_calls = _route_direct_tools(text, self.cfg)
         if direct_tool_calls and self.cfg.tools.enabled:
-            tool_results = self._execute_tool_calls(direct_tool_calls)
+            tool_results = self._execute_tool_calls(
+                direct_tool_calls,
+                source="direct_route",
+                speak=speak,
+            )
             direct_answer = _format_direct_tool_answer(tool_results)
             if direct_answer:
                 self._remember(text, direct_answer)
@@ -156,7 +205,11 @@ class VoiceAgent:
         final_text = first.content.strip()
 
         if tool_calls:
-            tool_results = self._execute_tool_calls(tool_calls)
+            tool_results = self._execute_tool_calls(
+                tool_calls,
+                source="llm",
+                speak=speak,
+            )
             direct_answer = _format_direct_tool_answer(tool_results)
             if direct_answer:
                 final_text = direct_answer
@@ -191,7 +244,11 @@ class VoiceAgent:
 
         direct_tool_calls = _route_direct_tools(text, self.cfg)
         if direct_tool_calls and self.cfg.tools.enabled:
-            tool_results = self._execute_tool_calls(direct_tool_calls)
+            tool_results = self._execute_tool_calls(
+                direct_tool_calls,
+                source="direct_route",
+                speak=speak,
+            )
             direct_answer = _format_direct_tool_answer(tool_results)
             if direct_answer:
                 if on_token:
@@ -211,7 +268,11 @@ class VoiceAgent:
         final_text = first_text
 
         if tool_calls:
-            tool_results = self._execute_tool_calls(tool_calls)
+            tool_results = self._execute_tool_calls(
+                tool_calls,
+                source="llm",
+                speak=speak,
+            )
             direct_answer = _format_direct_tool_answer(tool_results)
             if direct_answer:
                 if on_token and not _is_language_switch_tool_result(tool_results):
@@ -235,15 +296,41 @@ class VoiceAgent:
             + [LLMMessage("user", text)]
         )
 
-    def _execute_tool_calls(self, calls: List[ToolCall]) -> List[ToolResult]:
+    def _execute_tool_calls(
+        self,
+        calls: List[ToolCall],
+        *,
+        source: str,
+        speak: bool,
+    ) -> List[ToolResult]:
         results: List[ToolResult] = []
-        for call in calls:
+        for index, call in enumerate(calls):
+            started_at = time.perf_counter()
+            self._announce_tool_start(call.name, speak=speak)
             if call.name == "set_language":
                 language = str(call.arguments.get("language", ""))
-                results.append(self.set_language(language))
+                result = self.set_language(language)
             else:
-                results.append(self.tools.execute(call))
+                result = self.tools.execute(call)
+            results.append(result)
+            log_tool_event(
+                self.cfg.runtime.tool_log,
+                call,
+                result,
+                source=source,
+                duration_seconds=time.perf_counter() - started_at,
+                call_index=index,
+            )
         return results
+
+    def _announce_tool_start(self, tool_name: str, speak: bool) -> None:
+        message = tool_start_message(self.cfg, tool_name)
+        if not message:
+            return
+        if self.on_tool_start:
+            self.on_tool_start(tool_name, message)
+        if speak:
+            self.tts.speak(message)
 
     def _remember(self, user_text: str, assistant_text: str) -> None:
         self.history.append(LLMMessage("user", user_text))
@@ -299,6 +386,13 @@ class VoiceAgent:
                 initial_min_words=initial_words,
                 feedback_min_words=self.cfg.tts.stream_feedback_min_words,
                 max_initial_wait_seconds=self.cfg.tts.stream_max_initial_wait_seconds,
+                max_inter_chunk_wait_seconds=(
+                    self.cfg.tts.stream_max_inter_chunk_wait_seconds
+                ),
+                playback_prebuffer_chunks=self.cfg.tts.stream_playback_prebuffer_chunks,
+                playback_prebuffer_max_wait_seconds=(
+                    self.cfg.tts.stream_playback_prebuffer_max_wait_seconds
+                ),
                 on_spoken=self._record_spoken_segment,
                 stop_event=interrupt_event,
                 pause_event=interrupt_monitor.pause_event,
@@ -381,12 +475,19 @@ class VoiceAgent:
         path.parent.mkdir(parents=True, exist_ok=True)
         record = {
             "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "model_name": self._active_llm_model(),
             "user_text": result.user_text,
             "assistant_text": result.assistant_text,
             "tool_results": [asdict(item) for item in result.tool_results],
         }
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=True) + "\n")
+
+    def _active_llm_model(self) -> str:
+        if self.model_selection.mode == "online":
+            return online_llm_model(self.cfg)
+        return self.cfg.llm.model
+
 
 def _tool_results_message(tool_results: List[ToolResult], cfg: Config) -> LLMMessage:
     return LLMMessage(

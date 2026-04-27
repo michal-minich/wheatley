@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 import shutil
 import subprocess
 import time
@@ -11,7 +12,7 @@ from pathlib import Path
 from wheatly.audio.filter import apply_voice_filter
 from wheatly.audio.playback import play_audio, run_playback_command
 from wheatly.config import Config
-from wheatly.tts.base import SpeechResult, TTSBackend
+from wheatly.tts.base import PreparedSpeech, SpeechResult, TTSBackend
 
 
 class NoTTS(TTSBackend):
@@ -27,6 +28,9 @@ class MacOSSayTTS(TTSBackend):
     def speak(self, text: str) -> SpeechResult:
         if not self.cfg.tts.enabled:
             return SpeechResult(audio_path=None, spoken=False)
+        text = _normalize_tts_text(text)
+        if not text:
+            return SpeechResult(audio_path=None, spoken=False)
         command = ["say", "-v", self.cfg.tts.voice, text]
         return SpeechResult(audio_path=None, spoken=run_playback_command(command))
 
@@ -38,6 +42,19 @@ class PiperTTS(TTSBackend):
     def speak(self, text: str) -> SpeechResult:
         if not self.cfg.tts.enabled:
             return SpeechResult(audio_path=None, spoken=False)
+        prepared = self.prepare_for_playback(text)
+        spoken = self.play_prepared(prepared)
+        return SpeechResult(audio_path=prepared.audio_path, spoken=spoken)
+
+    def supports_stream_pipelining(self) -> bool:
+        return True
+
+    def prepare_for_playback(self, text: str) -> PreparedSpeech:
+        if not self.cfg.tts.enabled:
+            return PreparedSpeech(text=text, audio_path=None)
+        text = _normalize_tts_text(text)
+        if not text:
+            return PreparedSpeech(text="", audio_path=None)
         output_dir = Path(self.cfg.tts.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         base = _safe_audio_name(text)
@@ -75,10 +92,10 @@ class PiperTTS(TTSBackend):
             raise RuntimeError(completed.stderr.strip() or "piper failed")
 
         final_path = _postprocess_audio(raw_path, output_dir, base, self.cfg)
-        spoken = False
-        if self.cfg.tts.playback:
-            spoken = play_audio(final_path, self.cfg.tts.playback_command)
-        return SpeechResult(audio_path=final_path, spoken=spoken)
+        return PreparedSpeech(text=text, audio_path=final_path)
+
+    def play_prepared(self, prepared: PreparedSpeech) -> bool:
+        return _play_prepared_audio(self.cfg, prepared)
 
 
 class EdgeTTSTTS(TTSBackend):
@@ -88,6 +105,19 @@ class EdgeTTSTTS(TTSBackend):
     def speak(self, text: str) -> SpeechResult:
         if not self.cfg.tts.enabled:
             return SpeechResult(audio_path=None, spoken=False)
+        prepared = self.prepare_for_playback(text)
+        spoken = self.play_prepared(prepared)
+        return SpeechResult(audio_path=prepared.audio_path, spoken=spoken)
+
+    def supports_stream_pipelining(self) -> bool:
+        return True
+
+    def prepare_for_playback(self, text: str) -> PreparedSpeech:
+        if not self.cfg.tts.enabled:
+            return PreparedSpeech(text=text, audio_path=None)
+        text = _normalize_tts_text(text)
+        if not text:
+            return PreparedSpeech(text="", audio_path=None)
         output_dir = Path(self.cfg.tts.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         base = _safe_audio_name(text)
@@ -101,10 +131,10 @@ class EdgeTTSTTS(TTSBackend):
             volume=self.cfg.tts.edge_volume,
         )
         final_path = _postprocess_audio(raw_path, output_dir, base, self.cfg)
-        spoken = False
-        if self.cfg.tts.playback:
-            spoken = play_audio(final_path, self.cfg.tts.playback_command)
-        return SpeechResult(audio_path=final_path, spoken=spoken)
+        return PreparedSpeech(text=text, audio_path=final_path)
+
+    def play_prepared(self, prepared: PreparedSpeech) -> bool:
+        return _play_prepared_audio(self.cfg, prepared)
 
 
 class ExternalCommandTTS(TTSBackend):
@@ -114,6 +144,19 @@ class ExternalCommandTTS(TTSBackend):
     def speak(self, text: str) -> SpeechResult:
         if not self.cfg.tts.enabled:
             return SpeechResult(audio_path=None, spoken=False)
+        prepared = self.prepare_for_playback(text)
+        spoken = self.play_prepared(prepared)
+        return SpeechResult(audio_path=prepared.audio_path, spoken=spoken)
+
+    def supports_stream_pipelining(self) -> bool:
+        return True
+
+    def prepare_for_playback(self, text: str) -> PreparedSpeech:
+        if not self.cfg.tts.enabled:
+            return PreparedSpeech(text=text, audio_path=None)
+        text = _normalize_tts_text(text)
+        if not text:
+            return PreparedSpeech(text="", audio_path=None)
         if not self.cfg.tts.external_command:
             raise RuntimeError("tts.external_command is required for external TTS")
         output_dir = Path(self.cfg.tts.output_dir)
@@ -130,14 +173,14 @@ class ExternalCommandTTS(TTSBackend):
         if completed.returncode != 0:
             raise RuntimeError(completed.stderr.strip() or "external TTS failed")
         if not raw_path.exists():
-            return SpeechResult(audio_path=None, spoken=False)
+            return PreparedSpeech(text=text, audio_path=None)
         final_path = apply_voice_filter(
             raw_path, output_dir / f"{base}.wheatley.wav", self.cfg.tts.filter
         )
-        spoken = False
-        if self.cfg.tts.playback:
-            spoken = play_audio(final_path, self.cfg.tts.playback_command)
-        return SpeechResult(audio_path=final_path, spoken=spoken)
+        return PreparedSpeech(text=text, audio_path=final_path)
+
+    def play_prepared(self, prepared: PreparedSpeech) -> bool:
+        return _play_prepared_audio(self.cfg, prepared)
 
 
 def build_tts(cfg: Config) -> TTSBackend:
@@ -157,7 +200,24 @@ def build_tts(cfg: Config) -> TTSBackend:
 
 def _safe_audio_name(text: str) -> str:
     digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
-    return f"reply_{int(time.time())}_{digest}"
+    return f"reply_{time.time_ns()}_{digest}"
+
+
+def _normalize_tts_text(text: str) -> str:
+    text = text.strip()
+    if not text:
+        return ""
+    # Trailing ellipsis can produce audible "dot dot dot" artifacts in some voices.
+    text = re.sub(r"(?:\.{3,}|…+)\s*$", ".", text)
+    return text
+
+
+def _play_prepared_audio(cfg: Config, prepared: PreparedSpeech) -> bool:
+    if not cfg.tts.playback:
+        return False
+    if prepared.audio_path is None:
+        return False
+    return play_audio(prepared.audio_path, cfg.tts.playback_command)
 
 
 def _postprocess_audio(raw_path: Path, output_dir: Path, base: str, cfg: Config) -> Path:

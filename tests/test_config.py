@@ -40,6 +40,22 @@ class ConfigTests(unittest.TestCase):
             cfg = load_config(str(profile / "config.jsonc"))
             self.assertEqual(Path(cfg.prompts.system_path), profile / "system.md")
             self.assertEqual(Path(cfg.prompts.tools_path), profile / "tools.jsonc")
+            self.assertEqual(Path(cfg.profile_dir), profile)
+
+    def test_default_profile_runtime_lives_under_profile_folder(self):
+        cfg = load_config()
+        self.assertEqual(
+            Path(cfg.runtime.turn_log),
+            Path("profiles/wheatly/runtime/logs/turns.jsonl"),
+        )
+        self.assertEqual(
+            Path(cfg.runtime.tool_log),
+            Path("profiles/wheatly/runtime/logs/tools.jsonl"),
+        )
+        self.assertEqual(
+            Path(cfg.audio.utterance_dir),
+            Path("profiles/wheatly/runtime/audio"),
+        )
 
 
 if __name__ == "__main__":

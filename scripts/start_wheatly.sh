@@ -7,4 +7,10 @@ if [ -f ".venv/bin/activate" ]; then
   . ".venv/bin/activate"
 fi
 
+if [ -f ".env" ]; then
+  set -a
+  . ".env"
+  set +a
+fi
+
 exec env PYTHONPATH=src python3 -m wheatly voice

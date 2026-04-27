@@ -43,6 +43,7 @@ all = [
 
 [project.scripts]
 wheatly = "wheatly.cli:main"
+wheatly-stt-server = "wheatly.stt.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

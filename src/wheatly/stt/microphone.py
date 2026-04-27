@@ -150,7 +150,7 @@ class _PartialTranscriptWorker:
 
     def _run(self, frames) -> None:
         partial_path = self.output_path.with_name(
-            f"{self.output_path.stem}.partial.wav"
+            f"{self.output_path.stem}.partial_{time.time_ns()}.wav"
         )
         try:
             _write_wav(partial_path, frames, self.cfg)
@@ -162,10 +162,6 @@ class _PartialTranscriptWorker:
         except Exception:
             pass
         finally:
-            try:
-                partial_path.unlink(missing_ok=True)
-            except OSError:
-                pass
             with self.lock:
                 self.busy = False
 

@@ -122,8 +122,9 @@ class SpeechInterruptMonitor:
         return threshold
 
     def _verify_candidate(self, frames, audio_queue: queue.Queue, np) -> None:
-        self.pause_event.set()
-        stop_audio_playback()
+        pause_playback = self.cfg.speech_interrupt_pause_tts_while_verifying
+        if pause_playback:
+            self.pause_event.set()
         started_at = time.monotonic()
         target_samples = int(
             self.cfg.speech_interrupt_record_seconds * self.cfg.sample_rate
@@ -156,7 +157,8 @@ class SpeechInterruptMonitor:
         except Exception:
             pass
         finally:
-            self.pause_event.clear()
+            if pause_playback:
+                self.pause_event.clear()
 
     def _write_candidate(self, np, frames) -> Path:
         output_dir = Path(self.cfg.utterance_dir) / "interrupts"

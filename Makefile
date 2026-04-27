@@ -2,7 +2,7 @@ PYTHON ?= python3
 PYTHONPATH := src
 WHEATLY := PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m wheatly
 
-.PHONY: test doctor smoke bench tools stats voice
+.PHONY: test doctor smoke bench tools stats voice stt-server
 
 test:
 	PYTHONPATH=$(PYTHONPATH) $(PYTHON) -m unittest discover -s tests
@@ -24,3 +24,6 @@ stats:
 
 voice:
 	./scripts/start_wheatly.sh
+
+stt-server:
+	./scripts/start_janka_stt_server.sh

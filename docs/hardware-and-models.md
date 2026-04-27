@@ -16,10 +16,28 @@ Expected constraints:
 | Role | Default | Reason |
 | --- | --- | --- |
 | VAD | simple RMS VAD | zero dependency baseline |
-| STT | faster-whisper small.en int8 | speed and accent robustness baseline |
+| STT | remote_fallback to Janka Mac, local small.en/turbo fallback | lower robot RAM while keeping offline degradation |
 | LLM | Qwen3.5-4B Q4/Q5 | best first 8 GB quality/latency tradeoff |
 | TTS | Kokoro or Piper | local, fast, simple |
 | Filter | ffmpeg light preset | character voice without model coupling |
+
+## Current STT Split
+
+| Language | Remote STT target | Local fallback | Reason |
+| --- | --- | --- | --- |
+| English | `small.en` | `small.en` int8 | current quality is enough; optimize for latency |
+| Slovak | `models/whisper/whisper-large-v3-sk-ct2-int8`, converted from `NaiveNeuron/whisper-large-v3-sk` | `whisper-large-v3-turbo-sk-ct2-int8` | use the best larger Slovak model when Janka Mac is reachable |
+
+Remote STT and remote LLM are independent. The robot can use either service, both services, or neither service depending on what is reachable.
+
+Memory planning:
+
+| Robot mode | Practical RAM target | Notes |
+| --- | --- | --- |
+| Remote STT + remote LLM | 4-8 GB | robot mostly records audio, routes requests, and speaks |
+| Remote STT + local 4B LLM | 8-16 GB | good 8 GB target if local STT fallback stays small |
+| Local STT + local 4B LLM | 16 GB minimum | Slovak fallback can be tight on 8 GB |
+| Strong local Slovak STT + local 4B LLM | 32 GB comfortable | avoids relying on Janka Mac |
 
 ## Alternatives To Test
 
@@ -27,6 +45,8 @@ Expected constraints:
 | --- | --- | --- |
 | STT | Whisper medium | better accent tolerance |
 | STT | multilingual Whisper | code switching and Slovak-accented English |
+| STT | whisper.cpp Metal/CoreML small.en | macOS-only acceleration for English with similar quality |
+| STT | MLX Whisper | Apple Silicon experiment, especially for stock Whisper models |
 | STT | Nemotron Speech Streaming 0.6B | low-latency English on NVIDIA |
 | STT | Parakeet TDT 0.6B v3 | multilingual, includes Slovak |
 | LLM | Gemma 4 E2B | very low memory edge mode |
@@ -62,4 +82,3 @@ End-to-end speech-to-speech:
 | Ryzen 7840U/8845HS 64 GB | strong local AI mini-PC |
 | Jetson Orin Nano 8 GB | camera/CUDA body, not big LLM brain |
 | Raspberry Pi 5 | controller or minimal mode |
-

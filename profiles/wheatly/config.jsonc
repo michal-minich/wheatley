@@ -2,11 +2,13 @@
   // Runtime files for this persona. Keep each persona under its own runtime folder.
   "runtime": {
     // Base runtime folder for generated files.
-    "data_dir": "runtime/wheatly",
+    "data_dir": "profiles/wheatly/runtime",
     // JSONL conversation log.
-    "turn_log": "runtime/wheatly/logs/turns.jsonl",
+    "turn_log": "profiles/wheatly/runtime/logs/turns.jsonl",
+    // JSONL tool audit log with each request, result, source, and duration.
+    "tool_log": "profiles/wheatly/runtime/logs/tools.jsonl",
     // Persistent machine state, for example eye expression and latency stats.
-    "state_dir": "runtime/wheatly/state",
+    "state_dir": "profiles/wheatly/runtime/state",
     // Default language hint for runtime components.
     "default_language": "en"
   },
@@ -29,7 +31,7 @@
     // Maximum time to wait for speech before timing out.
     "max_wait_seconds": 30.0,
     // Recorded input audio folder.
-    "utterance_dir": "runtime/wheatly/audio",
+    "utterance_dir": "profiles/wheatly/runtime/audio",
     // Show experimental live transcript while the microphone is still recording.
     "partial_transcript_enabled": true,
     // How often to run preview STT on the current audio snapshot. Raise on weaker hardware.
@@ -61,7 +63,10 @@
     // Short verification clip length sent through STT after the trigger.
     "speech_interrupt_record_seconds": 0.9,
     // Ignore long transcripts so normal assistant speech containing "stop" is less likely to match.
-    "speech_interrupt_max_words": 4
+    "speech_interrupt_max_words": 4,
+    // If true, pause TTS while verifying stop-interrupt candidates.
+    // Keep false for smoother playback; verification runs in background.
+    "speech_interrupt_pause_tts_while_verifying": false
   },
   // Persona identity exposed to prompts.
   "agent": {
@@ -74,9 +79,10 @@
   },
   // Speech-to-text backend.
   "stt": {
-    // Options: keyboard, faster_whisper, whisper_cpp.
-    "backend": "faster_whisper",
-    // faster-whisper model name.
+    // Options: keyboard, faster_whisper, whisper_cpp, remote_fallback.
+    // remote_fallback tries Janka Mac first, then loads the local fallback model below.
+    "backend": "remote_fallback",
+    // Local fallback model name/path. Language mode overrides this per language.
     "model": "small.en",
     // Force English recognition for now.
     "language": "en",
@@ -91,7 +97,18 @@
     // Extra whisper.cpp arguments.
     "whisper_cpp_args": [
       "--no-timestamps"
-    ]
+    ],
+    // OpenAI-compatible remote STT endpoint on Janka Mac.
+    "remote_base_url": "http://jankas-mac-mini.local:8765/v1",
+    // API key is optional for the LAN server.
+    "remote_api_key": "EMPTY",
+    // Remote model requested for the active language. Language mode overrides this.
+    "remote_model": "small.en",
+    // Keep probes/failures short so the robot falls back quickly.
+    "remote_probe_timeout_seconds": 0.4,
+    "remote_request_timeout_seconds": 20.0,
+    // Local fallback backend used when the remote STT server is unreachable.
+    "remote_fallback_backend": "faster_whisper"
   },
   // Explicit language mode. Switch by saying configured phrases or via set_language tool.
   "language": {
@@ -99,7 +116,7 @@
     "enabled": true,
     // Startup language when no persisted state exists.
     "default": "en",
-    // Save last selected language under runtime/wheatly/state.
+    // Save last selected language under profiles/wheatly/runtime/state.
     "persist": true,
     // File name inside runtime.state_dir.
     "state_file": "language.json",
@@ -119,6 +136,8 @@
         "stt_model": "small.en",
         // STT language hint.
         "stt_language": "en",
+        // Remote STT model to request from Janka Mac. Same quality class as local English.
+        "remote_stt_model": "small.en",
         // TTS backend for English. Keep Piper local/offline here.
         "tts_backend": "piper",
         // macOS say voice label if that backend is used.
@@ -138,7 +157,7 @@
         // Edge TTS gain. Examples: "+0%", "+10%".
         "tts_edge_volume": "+0%",
         // Piper speed. Lower is faster.
-        "tts_length_scale": 0.62,
+        "tts_length_scale": 0.8,
         // Piper voice variation.
         "tts_noise_scale": 0.72,
         // Piper prosody variation.
@@ -151,16 +170,22 @@
         "tts_leading_silence_ms": 0,
         // If true, speech starts while text is still streaming.
         "tts_stream_speech": true,
-        // English first streamed TTS chunk target. Higher avoids tiny "Sure." chunks.
-        "tts_stream_initial_min_words": 5,
-        // English later streamed TTS chunk target. Higher reduces playback gaps between sentences.
-        "tts_stream_min_words": 18,
+        // English first streamed TTS chunk target. Keep low so speech starts quickly.
+        "tts_stream_initial_min_words": 8,
+        // English later streamed TTS chunk target. Moderate chunks reduce gaps without waiting too long.
+        "tts_stream_min_words": 22,
         // English hard cap for streamed TTS chunks.
         "tts_stream_max_words": 70,
         // English minimum timeout fallback chunk size.
-        "tts_stream_feedback_min_words": 10,
+        "tts_stream_feedback_min_words": 14,
         // English maximum wait before first speech feedback.
-        "tts_stream_max_initial_wait_seconds": 0.35,
+        "tts_stream_max_initial_wait_seconds": 0.7,
+        // English maximum wait between streamed chunks before forcing a smaller feedback chunk.
+        "tts_stream_max_inter_chunk_wait_seconds": 1.6,
+        // English startup prebuffer for pipelined synth+playback.
+        "tts_stream_playback_prebuffer_chunks": 4,
+        // Maximum extra wait to collect prebuffered chunks before first playback.
+        "tts_stream_playback_prebuffer_max_wait_seconds": 0.8,
         // Spoken/written confirmation after switching.
         "confirmation": "Hi",
         // Printed/spoken when the smarter online model is selected while starting in English.
@@ -168,7 +193,7 @@
         // Printed/spoken when the local offline model is selected while starting in English.
         "offline_model_message": "using offline model",
         // Online LM Studio model to use for English. Offline model remains llm.model.
-        "online_llm_model": "qwen3.6-35b-a3b-ud-mlx",
+        "online_llm_model": "lmstudio-community/gemma-4-31b-it",
         // Exact-ish phrases that trigger direct switching before the LLM.
         "switch_phrases": [
           "switch to english",
@@ -199,6 +224,8 @@
         "stt_model": "models/whisper/whisper-large-v3-turbo-sk-ct2-int8",
         // STT language hint.
         "stt_language": "sk",
+        // Remote STT model to request from Janka Mac. Full Slovak large-v3 is more accurate than the local turbo fallback.
+        "remote_stt_model": "models/whisper/whisper-large-v3-sk-ct2-int8",
         // Slovak TTS backend. Current default is online Microsoft Edge neural voice for a male voice.
         "tts_backend": "edge_tts",
         // Human-readable/current voice label.
@@ -229,18 +256,24 @@
         "tts_volume": 1.05,
         // Silence prepended before playback to avoid clipped first letters.
         "tts_leading_silence_ms": 80,
-        // Disabled for Slovak Edge TTS because per-chunk network synthesis caused long gaps during speech.
-        "tts_stream_speech": false,
-        // Slovak first streamed TTS chunk target. Larger chunks reduce Edge TTS network gaps.
-        "tts_stream_initial_min_words": 8,
-        // Slovak later streamed TTS chunk target. Larger chunks reduce pauses between generated audio files.
-        "tts_stream_min_words": 26,
+        // Stream Slovak speech too. Edge TTS may create small gaps, but starting early is more important.
+        "tts_stream_speech": true,
+        // Slovak first streamed TTS chunk target. Low enough for quick audible feedback.
+        "tts_stream_initial_min_words": 3,
+        // Slovak later streamed TTS chunk target. Larger than English to reduce Edge TTS network gaps.
+        "tts_stream_min_words": 14,
         // Slovak hard cap for streamed TTS chunks.
         "tts_stream_max_words": 90,
         // Slovak minimum timeout fallback chunk size.
-        "tts_stream_feedback_min_words": 12,
+        "tts_stream_feedback_min_words": 6,
         // Slovak maximum wait before first speech feedback.
-        "tts_stream_max_initial_wait_seconds": 0.8,
+        "tts_stream_max_initial_wait_seconds": 0.35,
+        // Slovak maximum wait between streamed chunks before forcing a smaller feedback chunk.
+        "tts_stream_max_inter_chunk_wait_seconds": 0.7,
+        // Slovak startup prebuffer for pipelined synth+playback.
+        "tts_stream_playback_prebuffer_chunks": 2,
+        // Maximum extra wait to collect prebuffered chunks before first playback.
+        "tts_stream_playback_prebuffer_max_wait_seconds": 0.35,
         // Spoken/written confirmation after switching.
         "confirmation": "Ahoj",
         // Printed/spoken when the smarter online model is selected while starting in Slovak.
@@ -248,7 +281,7 @@
         // Printed/spoken when the local offline model is selected while starting in Slovak.
         "offline_model_message": "Používam offline model.",
         // Online LM Studio model to use for Slovak. Offline model remains llm.model.
-        "online_llm_model": "mlx-community/gemma-4-31b-it",
+        "online_llm_model": "lmstudio-community/gemma-4-31b-it",
         // Exact-ish phrases that trigger direct switching before the LLM.
         "switch_phrases": [
           "switch to slovak",
@@ -314,6 +347,33 @@
       "offline_message": "using offline model"
     }
   },
+  // Automatic conversation-derived memory. File paths are fixed under this profile:
+  // auto_memory.md, memory_update.md, memory_consolidate.md, runtime/state/memory_state.json, and runtime/state/memory_candidates.jsonl.
+  "memory": {
+    // Keep manual memory.md and the remember tool unchanged; this controls only auto_memory.md.
+    "auto_enabled": true,
+    // Online memory updates can use assistant responses as context.
+    "include_assistant_text_online": true,
+    // Offline/local memory updates stay cheaper and use only user text.
+    "include_assistant_text_offline": false,
+    // Debug-friendly consolidation cadence. Increase after tuning.
+    "full_rewrite_interval_days": 1.0,
+    // Full consolidation is skipped unless the online model is selected.
+    "full_rewrite_requires_online": true,
+    // Raw turns from this many recent days are included in online consolidation.
+    "full_rewrite_recent_days": 14,
+    // Limit one incremental pass so startup cannot process an unbounded backlog.
+    "max_turns_per_update": 12,
+    // Limit compact candidate evidence passed to consolidation.
+    "max_candidates_for_rewrite": 240,
+    // Hard-ish prompt memory size target.
+    "max_total_words": 700,
+    // Section limits for generated auto_memory.md.
+    "max_stable_facts": 12,
+    "max_preferences": 10,
+    "max_current_projects": 8,
+    "max_recent_context": 8
+  },
   // Text-to-speech and playback.
   "tts": {
     // Options: auto, none, macos_say, piper, external.
@@ -323,7 +383,7 @@
     // Human-readable voice label.
     "voice": "Daniel",
     // Generated TTS audio folder.
-    "output_dir": "runtime/wheatly/audio",
+    "output_dir": "profiles/wheatly/runtime/audio",
     // Play audio after synthesis.
     "playback": true,
     // Optional custom playback command. Null uses built-in playback.
@@ -361,15 +421,21 @@
     // Adapt first spoken chunk from observed LLM/TTS speeds.
     "adaptive_streaming": true,
     // First spoken chunk target.
-    "stream_initial_min_words": 5,
+    "stream_initial_min_words": 3,
     // Later spoken chunk target.
-    "stream_min_words": 18,
+    "stream_min_words": 14,
     // Hard cap for spoken chunks.
     "stream_max_words": 70,
     // Fallback first chunk size when startup wait expires.
-    "stream_feedback_min_words": 10,
+    "stream_feedback_min_words": 6,
     // Maximum initial wait before some speech feedback starts.
-    "stream_max_initial_wait_seconds": 0.35,
+    "stream_max_initial_wait_seconds": 0.25,
+    // Maximum wait between streamed chunks before forcing a smaller feedback chunk.
+    "stream_max_inter_chunk_wait_seconds": 0.55,
+    // Number of prepared chunks to target before starting playback.
+    "stream_playback_prebuffer_chunks": 2,
+    // Maximum extra startup wait while collecting playback prebuffer.
+    "stream_playback_prebuffer_max_wait_seconds": 0.35,
     // External TTS command for backend external. Use {text} and {output} placeholders.
     "external_command": null,
     // Optional ffmpeg post-filter.
@@ -389,7 +455,24 @@
     // Whitelisted shell commands by logical name. Keep empty unless you add safe tools.
     "allowed_commands": {},
     // Optional camera command. Leave null until a camera is configured.
-    "photo_command": null
+    "photo_command": null,
+    // Web search is explicit and provider-backed; it does not scrape search engine HTML.
+    // Providers: brave, searxng, tavily. Brave uses BRAVE_SEARCH_API_KEY by default.
+    "web_search_enabled": true,
+    "web_search_provider": "brave",
+    // Required only for searxng, for example "http://127.0.0.1:8888".
+    "web_search_endpoint": "",
+    "web_search_api_key_env": "BRAVE_SEARCH_API_KEY",
+    "web_search_max_results": 5,
+    "web_search_timeout_seconds": 5.0,
+    // Fetch a known public URL and strip HTML into readable text/markdown-ish output.
+    "web_fetch_enabled": true,
+    "web_fetch_timeout_seconds": 8.0,
+    "web_fetch_max_bytes": 1000000,
+    "web_fetch_max_chars": 12000,
+    // Keep false unless you deliberately want URL fetching to reach LAN/localhost services.
+    "web_fetch_allow_private_networks": false,
+    "web_fetch_user_agent": "Wheatly/0.1 local voice assistant"
   },
   // Editable profile files. Relative paths resolve inside this profile folder.
   "prompts": {

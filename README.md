@@ -39,11 +39,15 @@ profiles/wheatly/
   user.md
   tools.jsonc
   memory.md
+  auto_memory.md
+  memory_update.md
+  memory_consolidate.md
+  runtime/
 ```
 
 `config.jsonc` is the main file. It contains comments next to the settings, so prefer editing it over duplicating settings in docs.
 
-The default runtime uses `profiles/wheatly/config.jsonc`. Keep runtime choices in that config instead of passing startup flags.
+The default runtime uses `profiles/wheatly/config.jsonc`. Keep runtime choices in that config instead of passing startup flags. `memory.md` is explicit/manual memory; `auto_memory.md` is generated from the profile-local runtime log using rules in `memory_update.md` and `memory_consolidate.md`.
 
 ## Useful Commands
 
@@ -60,8 +64,24 @@ Voice commands:
 - `Start a new chat.` clears conversation history but keeps profile instructions and memory.
 - `Remember this: ...` appends to the active profile memory.
 - `Switch language.` / `prepni jazyk` toggles between configured languages.
+- Selected tools print a colored `tool>` cue and, when speech is enabled, say a short active-language cue like `Searching...` / `Hľadám...`.
 
 Remote smart-model fallback is configured per profile in `llm.remote`.
+
+Remote STT fallback is configured per profile in `stt`. The default profile tries
+Janka Mac at `http://jankas-mac-mini.local:8765/v1` first, then falls back to the
+local STT model for the active language.
+
+Run the STT server on a stronger Mac:
+
+```bash
+PYTHONPATH=src python3 -m wheatly stt-server \
+  --host 0.0.0.0 \
+  --port 8765 \
+  --default-model small.en \
+  --model en=small.en \
+  --model sk=models/whisper/whisper-large-v3-sk-ct2-int8
+```
 
 ## Docs
 
