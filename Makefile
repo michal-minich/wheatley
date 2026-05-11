@@ -11,7 +11,7 @@ doctor:
 	. .venv/bin/activate 2>/dev/null || true; $(WHEATLEY) doctor
 
 smoke:
-	. .venv/bin/activate 2>/dev/null || true; $(WHEATLEY) once --text "what time is it?"
+	. .venv/bin/activate 2>/dev/null || true; $(WHEATLEY) --profile test once --text "what time is it?"
 
 bench:
 	. .venv/bin/activate 2>/dev/null || true; $(WHEATLEY) bench --repeat 3 --text "Answer in one short sentence: are you online?"
@@ -26,4 +26,4 @@ voice:
 	./scripts/start_wheatley.sh
 
 stt-server:
-	./scripts/start_janka_stt_server.sh
+	./scripts/start_remote_stt_server.sh

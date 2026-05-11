@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import re
-import unicodedata
+from dataclasses import fields
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from wheatley.config import Config, LanguageOptionConfig
+from wheatley.text import normalize_words
+
+LANGUAGE_STATE_FILENAME = "language.json"
 
 
 def apply_configured_language(cfg: Config, language: Optional[str] = None) -> str:
@@ -14,77 +17,35 @@ def apply_configured_language(cfg: Config, language: Optional[str] = None) -> st
         return cfg.runtime.default_language
     code = normalize_language_code(cfg, language or read_language_state(cfg))
     if code is None:
-        code = normalize_language_code(cfg, cfg.language.default) or "en"
-    option = cfg.language.languages.get(code)
-    if option is None:
+        code = normalize_language_code(cfg, cfg.language.default)
+    if code is None:
         return cfg.runtime.default_language
+    option = cfg.language.languages[code]
 
     cfg.runtime.default_language = code
-    cfg.agent.default_response_language = option.response_language or option.label
-    if option.audio_partial_transcript_enabled is not None:
-        cfg.audio.partial_transcript_enabled = option.audio_partial_transcript_enabled
-    if option.audio_partial_transcript_use_as_final is not None:
-        cfg.audio.partial_transcript_use_as_final = option.audio_partial_transcript_use_as_final
-    if option.stt_model is not None:
-        cfg.stt.model = option.stt_model
-    cfg.stt.language = option.stt_language
-    if option.remote_stt_model is not None:
-        cfg.stt.remote_model = option.remote_stt_model
-    if option.tts_backend:
-        cfg.tts.backend = option.tts_backend
-    if option.tts_voice:
-        cfg.tts.voice = option.tts_voice
-    if option.tts_piper_model:
-        cfg.tts.piper_model = option.tts_piper_model
-    cfg.tts.piper_config = option.tts_piper_config
-    cfg.tts.piper_speaker = option.tts_piper_speaker
-    if option.tts_edge_voice:
-        cfg.tts.edge_voice = option.tts_edge_voice
-    if option.tts_edge_rate:
-        cfg.tts.edge_rate = option.tts_edge_rate
-    if option.tts_edge_pitch:
-        cfg.tts.edge_pitch = option.tts_edge_pitch
-    if option.tts_edge_volume:
-        cfg.tts.edge_volume = option.tts_edge_volume
-    if option.tts_length_scale is not None:
-        cfg.tts.length_scale = option.tts_length_scale
-    if option.tts_noise_scale is not None:
-        cfg.tts.noise_scale = option.tts_noise_scale
-    if option.tts_noise_w_scale is not None:
-        cfg.tts.noise_w_scale = option.tts_noise_w_scale
-    if option.tts_sentence_silence is not None:
-        cfg.tts.sentence_silence = option.tts_sentence_silence
-    if option.tts_volume is not None:
-        cfg.tts.volume = option.tts_volume
-    if option.tts_leading_silence_ms is not None:
-        cfg.tts.leading_silence_ms = option.tts_leading_silence_ms
-    if option.tts_stream_speech is not None:
-        cfg.tts.stream_speech = option.tts_stream_speech
-    if option.tts_stream_initial_min_words is not None:
-        cfg.tts.stream_initial_min_words = option.tts_stream_initial_min_words
-    if option.tts_stream_min_words is not None:
-        cfg.tts.stream_min_words = option.tts_stream_min_words
-    if option.tts_stream_max_words is not None:
-        cfg.tts.stream_max_words = option.tts_stream_max_words
-    if option.tts_stream_feedback_min_words is not None:
-        cfg.tts.stream_feedback_min_words = option.tts_stream_feedback_min_words
-    if option.tts_stream_max_initial_wait_seconds is not None:
-        cfg.tts.stream_max_initial_wait_seconds = (
-            option.tts_stream_max_initial_wait_seconds
-        )
-    if option.tts_stream_max_inter_chunk_wait_seconds is not None:
-        cfg.tts.stream_max_inter_chunk_wait_seconds = (
-            option.tts_stream_max_inter_chunk_wait_seconds
-        )
-    if option.tts_stream_playback_prebuffer_chunks is not None:
-        cfg.tts.stream_playback_prebuffer_chunks = (
-            option.tts_stream_playback_prebuffer_chunks
-        )
-    if option.tts_stream_playback_prebuffer_max_wait_seconds is not None:
-        cfg.tts.stream_playback_prebuffer_max_wait_seconds = (
-            option.tts_stream_playback_prebuffer_max_wait_seconds
-        )
+    cfg.agent.default_response_language = option.response_language
+    _apply_present_fields(cfg.audio, option.audio)
+    _apply_present_fields(cfg.stt, option.stt)
+    cfg.stt.language = option.stt.language
+    _apply_present_fields(cfg.tts, option.tts, skip_empty_strings=True)
+    cfg.tts.piper_config = option.tts.piper_config
+    cfg.tts.piper_speaker = option.tts.piper_speaker
     return code
+
+
+def _apply_present_fields(
+    target: object,
+    source: object,
+    *,
+    skip_empty_strings: bool = False,
+) -> None:
+    for item in fields(source):
+        value = getattr(source, item.name)
+        if value is None:
+            continue
+        if skip_empty_strings and value == "":
+            continue
+        setattr(target, item.name, value)
 
 
 def set_language_state(cfg: Config, requested_language: str) -> tuple[bool, dict]:
@@ -142,7 +103,7 @@ def read_previous_language_state(cfg: Config) -> str:
 
 
 def language_state_path(cfg: Config) -> Path:
-    return Path(cfg.runtime.state_dir) / cfg.language.state_file
+    return Path(cfg.runtime.state_dir) / LANGUAGE_STATE_FILENAME
 
 
 def normalize_language_code(cfg: Config, value: Optional[str]) -> Optional[str]:
@@ -151,22 +112,12 @@ def normalize_language_code(cfg: Config, value: Optional[str]) -> Optional[str]:
     normalized = _normalize_text(value)
     if normalized in cfg.language.languages:
         return normalized
-    aliases = {
-        "eng": "en",
-        "english": "en",
-        "anglictina": "en",
-        "anglicky": "en",
-        "po anglicky": "en",
-        "slovak": "sk",
-        "slovencina": "sk",
-        "slovensky": "sk",
-        "po slovensky": "sk",
-    }
-    if normalized in aliases and aliases[normalized] in cfg.language.languages:
-        return aliases[normalized]
     for code, option in cfg.language.languages.items():
         if normalized == _normalize_text(option.label):
             return code
+        for alias in option.aliases:
+            if normalized == _normalize_text(alias):
+                return code
     return None
 
 
@@ -177,58 +128,38 @@ def match_language_switch(cfg: Config, text: str) -> Optional[str]:
     if not normalized:
         return None
     for code, option in cfg.language.languages.items():
-        for phrase in option.switch_phrases:
+        for phrase in option.target_switch_phrases:
             phrase_text = _normalize_text(phrase)
             if phrase_text and _phrase_matches(normalized, phrase_text):
                 return code
     for code, option in cfg.language.languages.items():
-        for phrase in option.switch_language_phrases:
+        for phrase in option.toggle_switch_phrases:
             phrase_text = _normalize_text(phrase)
             if phrase_text and _phrase_matches(normalized, phrase_text):
                 return _target_for_generic_switch(cfg, phrase_language=code)
     return None
 
 
-def active_language_hint(cfg: Config) -> str:
-    if not cfg.language.enabled:
-        return ""
+def language_status_payload(cfg: Config) -> dict:
     code = normalize_language_code(cfg, cfg.runtime.default_language)
     if code is None:
-        return ""
-    option = cfg.language.languages.get(code)
-    if option is None:
-        return ""
-    return (
-        f"Current language mode: {option.label} ({code}). "
-        f"Reply in {option.response_language or option.label}. "
-        "Do not switch language unless the user explicitly asks."
-    )
-
-
-def language_status_payload(cfg: Config) -> dict:
-    code = normalize_language_code(cfg, cfg.runtime.default_language) or cfg.runtime.default_language
-    option = cfg.language.languages.get(code)
-    if option is None:
-        return {"language": code}
-    return _language_payload(code, option)
+        return {"language": cfg.runtime.default_language}
+    return _language_payload(code, cfg.language.languages[code])
 
 
 def model_selection_message(cfg: Config, mode: str, stt_mode: str = "local") -> str:
     code = normalize_language_code(cfg, cfg.runtime.default_language)
     option = cfg.language.languages.get(code or "") if code else None
-    slovak = code == "sk" or (
-        option is not None and _normalize_text(option.response_language) == "slovak"
-    )
     if mode == "online":
         if option and option.online_model_message:
             base = option.online_model_message
         else:
-            base = cfg.llm.remote.online_message
+            base = _localized_remote_message(cfg.llm.remote.online_message, cfg)
     elif option and option.offline_model_message:
         base = option.offline_model_message
     else:
-        base = cfg.llm.remote.offline_message
-    return _model_stt_message(base, stt_mode, slovak=slovak)
+        base = _localized_remote_message(cfg.llm.remote.offline_message, cfg)
+    return _model_stt_message(base, stt_mode, option)
 
 
 def online_llm_model(cfg: Config) -> str:
@@ -239,18 +170,45 @@ def online_llm_model(cfg: Config) -> str:
     return cfg.llm.remote.model
 
 
-def _model_stt_message(base: str, stt_mode: str, slovak: bool) -> str:
+def _model_stt_message(
+    base: str,
+    stt_mode: str,
+    option: Optional[LanguageOptionConfig],
+) -> str:
     base = base.strip().rstrip(".!")
-    remote = stt_mode == "remote"
-    if slovak:
-        stt = (
-            "vzdialené rozpoznávanie reči"
-            if remote
-            else "lokálne rozpoznávanie reči"
-        )
-        return f"{base} a {stt}."
-    stt = "remote speech recognition" if remote else "local speech recognition"
-    return f"{base} and {stt}."
+    if option is None:
+        return _finish_sentence(base)
+    stt = option.remote_stt_message if stt_mode == "remote" else option.local_stt_message
+    template = option.model_selection_message_template
+    if not template or not stt:
+        return _finish_sentence(base)
+    return _finish_sentence(template.format(model=base, stt=stt))
+
+
+def _localized_remote_message(value: Any, cfg: Config) -> str:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, dict):
+        return ""
+    code = normalize_language_code(cfg, cfg.runtime.default_language)
+    if code and isinstance(value.get(code), str):
+        return value[code]
+    default_code = normalize_language_code(cfg, cfg.language.default)
+    if default_code and isinstance(value.get(default_code), str):
+        return value[default_code]
+    if isinstance(value.get("en"), str):
+        return value["en"]
+    for message in value.values():
+        if isinstance(message, str):
+            return message
+    return ""
+
+
+def _finish_sentence(text: str) -> str:
+    text = text.strip()
+    if not text:
+        return ""
+    return text if text.endswith((".", "!", "?")) else text + "."
 
 
 def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
@@ -258,27 +216,37 @@ def _language_payload(code: str, option: LanguageOptionConfig) -> dict:
         "language": code,
         "label": option.label,
         "response_language": option.response_language,
-        "audio_partial_transcript_enabled": option.audio_partial_transcript_enabled,
-        "audio_partial_transcript_use_as_final": option.audio_partial_transcript_use_as_final,
-        "stt_model": option.stt_model,
-        "stt_language": option.stt_language,
-        "remote_stt_model": option.remote_stt_model,
-        "tts_backend": option.tts_backend,
-        "tts_voice": option.tts_voice,
-        "tts_piper_model": option.tts_piper_model,
-        "tts_edge_voice": option.tts_edge_voice,
-        "tts_length_scale": option.tts_length_scale,
-        "tts_leading_silence_ms": option.tts_leading_silence_ms,
-        "tts_stream_speech": option.tts_stream_speech,
-        "tts_stream_initial_min_words": option.tts_stream_initial_min_words,
-        "tts_stream_min_words": option.tts_stream_min_words,
-        "tts_stream_feedback_min_words": option.tts_stream_feedback_min_words,
-        "tts_stream_max_inter_chunk_wait_seconds": (
-            option.tts_stream_max_inter_chunk_wait_seconds
+        "audio_partial_transcript_enabled": option.audio.partial_transcript_enabled,
+        "audio_partial_transcript_use_as_final": (
+            option.audio.partial_transcript_use_as_final
         ),
-        "tts_stream_playback_prebuffer_chunks": option.tts_stream_playback_prebuffer_chunks,
+        "stt_model": option.stt.model,
+        "stt_language": option.stt.language,
+        "remote_stt_model": option.stt.remote_model,
+        "stt_preview_model": option.stt.preview_model,
+        "stt_preview_beam_size": option.stt.preview_beam_size,
+        "stt_preview_use_remote": option.stt.preview_use_remote,
+        "stt_final_model": option.stt.final_model,
+        "stt_final_beam_size": option.stt.final_beam_size,
+        "stt_final_use_remote": option.stt.final_use_remote,
+        "tts_backend": option.tts.backend,
+        "tts_voice": option.tts.voice,
+        "tts_piper_model": option.tts.piper_model,
+        "tts_edge_voice": option.tts.edge_voice,
+        "tts_length_scale": option.tts.length_scale,
+        "tts_leading_silence_ms": option.tts.leading_silence_ms,
+        "tts_stream_speech": option.tts.stream_speech,
+        "tts_stream_initial_min_words": option.tts.stream_initial_min_words,
+        "tts_stream_min_words": option.tts.stream_min_words,
+        "tts_stream_feedback_min_words": option.tts.stream_feedback_min_words,
+        "tts_stream_max_inter_chunk_wait_seconds": (
+            option.tts.stream_max_inter_chunk_wait_seconds
+        ),
+        "tts_stream_playback_prebuffer_chunks": (
+            option.tts.stream_playback_prebuffer_chunks
+        ),
         "tts_stream_playback_prebuffer_max_wait_seconds": (
-            option.tts_stream_playback_prebuffer_max_wait_seconds
+            option.tts.stream_playback_prebuffer_max_wait_seconds
         ),
         "confirmation": option.confirmation,
         "online_model_message": option.online_model_message,
@@ -305,7 +273,4 @@ def _phrase_matches(text: str, phrase: str) -> bool:
 
 
 def _normalize_text(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text.lower())
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    text = re.sub(r"[^a-z0-9\s]+", " ", text)
-    return " ".join(text.split())
+    return normalize_words(text)

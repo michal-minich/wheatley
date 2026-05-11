@@ -23,12 +23,18 @@ class STTModelRouter:
         model_map: dict[str, str],
         device: str,
         compute_type: str,
+        beam_size: int = 1,
+        vad_filter: bool = True,
+        condition_on_previous_text: bool = False,
     ):
         self.backend = backend
         self.default_model = default_model
         self.model_map = model_map
         self.device = device
         self.compute_type = compute_type
+        self.beam_size = beam_size
+        self.vad_filter = vad_filter
+        self.condition_on_previous_text = condition_on_previous_text
         self._backends: dict[tuple[str, str], STTBackend] = {}
 
     def transcribe(
@@ -36,9 +42,11 @@ class STTModelRouter:
         audio_path: Path,
         language: Optional[str],
         requested_model: Optional[str],
+        requested_beam_size: Optional[int] = None,
     ):
         model = self._select_model(language, requested_model)
-        key = (language or "", model)
+        beam_size = requested_beam_size or self.beam_size
+        key = (language or "", model, beam_size)
         if key not in self._backends:
             cfg = STTConfig(
                 backend=self.backend,
@@ -46,6 +54,9 @@ class STTModelRouter:
                 language=language,
                 device=self.device,
                 compute_type=self.compute_type,
+                beam_size=beam_size,
+                vad_filter=self.vad_filter,
+                condition_on_previous_text=self.condition_on_previous_text,
             )
             self._backends[key] = build_stt(cfg)
         return self._backends[key].transcribe(audio_path)
@@ -99,12 +110,18 @@ class _STTRequestHandler(BaseHTTPRequestHandler):
             fields, file_bytes, filename = self._read_multipart()
             language = _blank_to_none(fields.get("language"))
             model = _blank_to_none(fields.get("model"))
+            beam_size = _int_or_none(fields.get("beam_size"))
             suffix = Path(filename or "audio.wav").suffix or ".wav"
             started = time.perf_counter()
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as audio:
                 audio.write(file_bytes)
                 audio.flush()
-                result = self.model_router.transcribe(Path(audio.name), language, model)
+                result = self.model_router.transcribe(
+                    Path(audio.name),
+                    language,
+                    model,
+                    requested_beam_size=beam_size,
+                )
             self._json(
                 {
                     "text": result.text,
@@ -166,10 +183,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--backend", default="faster_whisper")
-    parser.add_argument("--default-model", default="small.en")
+    parser.add_argument(
+        "--default-model",
+        default="small",
+    )
     parser.add_argument("--model", action="append", default=[], help="language=model")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--compute-type", default="int8")
+    parser.add_argument("--beam-size", type=int, default=1)
+    parser.add_argument("--no-vad-filter", action="store_true")
+    parser.add_argument("--condition-on-previous-text", action="store_true")
     args = parser.parse_args(argv)
 
     router = STTModelRouter(
@@ -178,6 +201,9 @@ def main(argv: list[str] | None = None) -> int:
         model_map=_parse_model_map(args.model),
         device=args.device,
         compute_type=args.compute_type,
+        beam_size=args.beam_size,
+        vad_filter=not args.no_vad_filter,
+        condition_on_previous_text=args.condition_on_previous_text,
     )
     serve(args.host, args.port, router)
     return 0
@@ -198,6 +224,13 @@ def _blank_to_none(value: Optional[str]) -> Optional[str]:
         return None
     value = value.strip()
     return value or None
+
+
+def _int_or_none(value: Optional[str]) -> Optional[int]:
+    value = _blank_to_none(value)
+    if value is None:
+        return None
+    return int(value)
 
 
 if __name__ == "__main__":

@@ -234,15 +234,11 @@ class StreamingSpeaker:
         max_words = max(self.max_words, min_words)
 
         sentence_min_words = (
-            1
-            if first_segment
-            else (
-                min_words
-                if not waited_too_long
-                else min(
-                    self.feedback_min_words,
-                    _MIN_COMPLETE_SENTENCE_WORDS_ON_TIMEOUT,
-                )
+            min_words
+            if not waited_too_long
+            else min(
+                self.feedback_min_words,
+                _MIN_COMPLETE_SENTENCE_WORDS_ON_TIMEOUT,
             )
         )
         sentence_boundary = _preferred_boundary_index(
@@ -258,6 +254,20 @@ class StreamingSpeaker:
 
         if first_segment:
             # Keep the opening chunk sentence-aligned for fluency.
+            # If we already waited long enough, provide shorter audible feedback.
+            if waited_too_long and len(words) >= self.feedback_min_words:
+                boundary = _word_boundary_index(
+                    self._buffer,
+                    min(len(words), self.feedback_min_words),
+                )
+                segment = self._buffer[:boundary].strip()
+                self._buffer = self._buffer[boundary:]
+                return segment
+            if len(words) >= max_words:
+                boundary = _word_boundary_index(self._buffer, max_words)
+                segment = self._buffer[:boundary].strip()
+                self._buffer = self._buffer[boundary:]
+                return segment
             # If there is never a sentence boundary, finish(final=True) flushes
             # the remaining text so short/no-punctuation replies are still spoken.
             return ""

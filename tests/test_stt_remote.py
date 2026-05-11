@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from wheatley.config import Config, STTConfig
+from wheatley.config import Config, STTConfig, load_config
 from wheatley.language import apply_configured_language
 from wheatley.stt.backends import RemoteFallbackSTT, build_stt
 from wheatley.stt.base import STTBackend, Transcription
@@ -27,6 +27,9 @@ class RemoteSTTTests(unittest.TestCase):
                 remote_base_url=f"http://127.0.0.1:{server.server_port}/v1",
                 remote_model="small.en",
                 language="en",
+                remote_probe_timeout_seconds=0.2,
+                remote_request_timeout_seconds=2.0,
+                remote_fallback_backend="faster_whisper",
             )
             stt = build_stt(cfg)
             result = stt.transcribe(_write_wav())
@@ -41,6 +44,8 @@ class RemoteSTTTests(unittest.TestCase):
             backend="remote_fallback",
             remote_base_url="http://127.0.0.1:9/v1",
             remote_request_timeout_seconds=0.1,
+            remote_probe_timeout_seconds=0.1,
+            remote_fallback_backend="faster_whisper",
         )
         stt = RemoteFallbackSTT(cfg)
         with patch.object(stt, "_fallback_backend", return_value=FixedSTT()):
@@ -52,17 +57,19 @@ class RemoteSTTTests(unittest.TestCase):
             cfg = Config()
             cfg.runtime.data_dir = tmp
             cfg.runtime.state_dir = str(Path(tmp) / "state")
+            cfg.language = load_config().language
             cfg.language.enabled = True
             cfg.language.default = "sk"
             cfg.ensure_dirs()
 
             apply_configured_language(cfg, "sk")
 
+            self.assertEqual(cfg.stt.language, "sk")
+            self.assertEqual(cfg.stt.model, "small")
             self.assertEqual(
-                cfg.stt.model,
+                cfg.stt.remote_model,
                 "models/whisper/whisper-large-v3-turbo-sk-ct2-int8",
             )
-            self.assertEqual(cfg.stt.remote_model, "models/whisper/whisper-large-v3-sk-ct2-int8")
 
 
 def _start_server():

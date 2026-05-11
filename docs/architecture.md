@@ -1,166 +1,111 @@
 # Architecture
 
-The first implementation is a cascaded, offline-first voice pipeline:
+This project is a cascaded local voice agent. Each stage does one job, records enough state to debug failures, and can be replaced without rewriting the whole assistant.
 
 ```text
-microphone
-  -> VAD / utterance recorder
-  -> STT
-  -> conversation agent
-  -> tool parser and whitelist executor
-  -> LLM final answer
-  -> streaming text output
-  -> streaming TTS segment queue
-  -> optional Wheatley voice filter
-  -> speaker
+microphone -> STT -> LLM -> whitelisted tools -> final answer -> TTS -> speaker
 ```
 
-## Why Cascaded Pipeline
+## Design Goals
 
-We are intentionally not starting with an end-to-end speech-to-speech model.
+- Work locally first on 8 GB class hardware.
+- Keep voice latency practical.
+- Keep model behavior inspectable through logs.
+- Keep tool use small, explicit, and safe.
+- Keep assistant instructions and memory editable without touching Python code.
 
-Reasons:
+## Runtime Flow
 
-- Better tool-use control.
-- Easier debugging because every step is visible in logs.
-- Lower RAM pressure on 8 GB machines.
-- Easier model swaps for STT, LLM, and TTS independently.
-- Easier support for English now and Slovak later.
+1. The microphone records one utterance and saves it under the active profile.
+2. STT turns the audio into text.
+3. The agent builds a prompt from profile instructions, user preferences, memory, tool descriptions, and recent chat history.
+4. The LLM either answers directly or emits a JSON tool request.
+5. Only whitelisted tools can run.
+6. Tool results are sent back to the LLM when needed. Successful camera captures are attached as image input only when the active model name is recognized as vision-capable.
+7. The final answer is printed and optionally spoken.
+8. Turn logs, tool logs, generated speech, and state are saved under the active profile.
 
-End-to-end multimodal/audio models remain interesting for later experiments, but they make interruption handling, logging, voice control, and safe tools harder.
+## Profiles
 
-## Main Modules
+Profiles are the main editing surface.
 
-- `wheatley.cli`: command-line interface.
-- `wheatley.pipeline`: turn orchestration and conversation history.
-- `wheatley.stt`: keyboard, faster-whisper, whisper.cpp, remote STT fallback, and the bundled STT HTTP server.
-- `wheatley.llm`: echo, Ollama, and OpenAI-compatible adapters.
-- `wheatley.tts`: no-op, macOS say, Piper, Edge TTS, and external command adapters.
-- `wheatley.audio`: playback and ffmpeg post-filter.
-- `wheatley.tools`: deterministic whitelist tools and parser.
-
-## Profiles, Instructions And Memory
-
-The system prompt is assembled by `wheatley.prompting.build_system_prompt()`.
-
-The active persona is the profile folder under `profiles/wheatley/`:
-
-- `config.jsonc`: runtime, model, voice, tool and path settings.
-- `system.md`: main assistant behavior and tool-calling rules.
-- `user.md`: user preferences and extra always-on instructions.
-- `tools.jsonc`: editable tool descriptions and tool-specific instructions.
-- `memory.md`: manual persistent memory injected into context.
-- `auto_memory.md`: generated conversation-derived memory injected after manual memory.
-- `memory_update.md`: editable instructions for incremental automatic memory updates.
-- `memory_consolidate.md`: editable instructions for full automatic memory consolidation.
-- `runtime/`: profile-local logs, state, generated audio, and memory state.
-
-Profile text files can use template markers such as `{{AGENT_NAME}}`, `{{AGENT_PERSONA}}`, `{{DEFAULT_RESPONSE_LANGUAGE}}`, `{{ACTIVE_LANGUAGE_HINT}}`, `{{CURRENT_LANGUAGE_CODE}}`, `{{CURRENT_LANGUAGE_LABEL}}`, `{{CURRENT_STT_MODEL}}`, `{{CURRENT_TTS_BACKEND}}`, `{{CURRENT_TTS_VOICE}}`, and `{{CURRENT_TTS_EDGE_VOICE}}`.
-
-The live transcribed utterance or text is passed as the final user message to `VoiceAgent.handle_text*()`. Persistent memory is not a search tool; manual memory and generated auto-memory are injected automatically into the system prompt at the start of every turn, including after a new chat reset.
-
-`memory.md` remains explicit and tool-managed. The `remember` tool only appends to that file. Automatic history-derived memory is stored separately in `auto_memory.md` and is built from profile-local `runtime/logs/turns.jsonl`. Incremental updates use only turns newer than the last memory update, while full consolidation can use the current auto-memory, compact candidate evidence, and selected recent log turns.
-
-## Remote STT
-
-STT and LLM fallback are independent. The profile can use remote STT while keeping the local LLM, local STT while using the remote LLM, both remote services, or both local services.
-
-The startup/new-chat `model>` status line also treats them independently. It probes the remote LLM and remote STT endpoints, keeps the LLM mode as `online` or `offline` for memory behavior, and adds a separate STT mode of `remote` or `local` for the user-facing announcement.
-
-The default `stt.backend` is `remote_fallback`:
-
-1. POST the recorded WAV to `stt.remote_base_url` using an OpenAI-compatible `/v1/audio/transcriptions` request.
-2. Send `language` and the active `remote_stt_model`.
-3. If the remote request fails, load the configured local fallback backend from `stt.remote_fallback_backend` and transcribe locally.
-
-Language switching keeps local and remote STT model choices separate. English uses `small.en` for both remote and local quality. Slovak requests the server-side CTranslate2 conversion of `NaiveNeuron/whisper-large-v3-sk` at `models/whisper/whisper-large-v3-sk-ct2-int8` and keeps the existing local `models/whisper/whisper-large-v3-turbo-sk-ct2-int8` fallback.
-
-The remote server lives in this repo as `wheatley.stt.server` and can be started with:
-
-```bash
-PYTHONPATH=src python3 -m wheatley stt-server \
-  --host 0.0.0.0 \
-  --port 8765 \
-  --default-model small.en \
-  --model en=small.en \
-  --model sk=models/whisper/whisper-large-v3-sk-ct2-int8
+```text
+profiles/wheatley/
+  config.jsonc
+  system.md
+  user.md
+  memory.md
+  auto_memory.md
+  python_preamble.py
+  files/
+  memory_update.md
+  memory_consolidate.md
+  runtime/
 ```
 
-The server intentionally does not download or commit model weights. Models belong under `models/` or the normal Hugging Face cache on the serving machine.
+- `config.jsonc`: model choices, audio behavior, TTS, tools, memory, and runtime settings.
+- `system.md`: assistant behavior.
+- `user.md`: always-on user preferences.
+- `memory.md`: explicit manual memory.
+- `auto_memory.md`: generated memory from previous turns.
+- `python_preamble.py`: trusted imports and helper functions for the optional Python scratchpad.
+- `files/`: default read-only file root for the optional Python scratchpad.
+- `runtime/`: logs, state, recorded audio, and generated speech.
 
-## Tool Protocol
+Use `profiles/test/` for smoke checks. It uses an echo backend so validation does not depend on downloaded models.
 
-Local models are asked to emit tool calls as plain JSON:
+## Tools
+
+The LLM never gets raw shell access. It can only ask for tools that are registered and enabled by config.
+
+Common enabled tools:
+
+- `get_time`
+- `calculator`
+- `remember`
+- `take_photo`
+
+Optional tools exist for device state, display expression, approved local commands, web search, and a bounded Python scratchpad, but they must be explicitly enabled and configured.
+
+The camera tool is still whitelisted: it runs only configured or built-in local capture commands, never unrestricted shell. The default output uses a small configured short side for latency while preserving the camera's returned aspect ratio. Image attachment is automatic from the active model name; names containing hints such as `llava`, `moondream`, `minicpm-v`, `minicpm-o`, `pixtral`, `paligemma`, `qwen-vl`, `qwen2-vl`, `qwen2.5-vl`, `llama-3.2-vision`, `gemma3`, `gemma-3`, `gemma-4`, `gpt-4o`, `gpt-4.1`, `gpt-5`, or `claude-3` receive image payloads. Current/default text-only names such as `qwen3.5:4b` and `qwen3.6-35b-a3b-ud-mlx` receive only photo metadata.
+
+The Python scratchpad is not unrestricted Python. Model code cannot write imports; trusted imports and helper functions live in `python_preamble.py`. Scratchpad file helpers are read-only and limited to configured roots such as profile-local `files/`. It runs in a subprocess with a timeout, output caps, and best-effort memory/file-size resource caps, which is useful for local calculations and data transforms but is not a hostile-code OS sandbox.
+
+## Memory
+
+Manual memory and automatic memory are separate.
+
+- `memory.md` is edited by the user or by the explicit `remember` command.
+- `auto_memory.md` is generated from conversation logs.
+
+Both are injected into the system prompt. Starting a new chat clears recent conversation history but keeps profile instructions and memory.
+
+## Streaming
+
+Text can stream to the terminal as the LLM generates it. Speech can also start before the full answer is complete by splitting the answer into short TTS chunks.
+
+This is not true token-level speech synthesis. It is a practical latency optimization that works with normal local TTS engines.
+
+## Two-Phase STT
+
+Live partial transcription and endpoint final transcription can use different models. The checked-in profiles use multilingual `small` for local preview and `distil-large-v3` for local final transcription. Each phase has independent remote toggles and remote model names. If configured remote preview or remote final STT is unavailable, the fallback is always the local preview model so voice input remains usable.
+
+Microphone endpointing measures speech and silence from captured audio samples, not from wall-clock loop time. That keeps CPU-heavy preview transcription from making a short low-energy block look like a long pause. `audio.max_utterance_seconds` is a soft budget: after it is reached, recording continues until the configured silence endpoint so active speech and short pauses are not cut off. Final WAV trimming preserves the endpoint tail, capped at 2s, so quiet syllables already captured by the recorder are not removed before final STT. Preview and final STT backends are also cached and locked per backend/model, so a stale preview job does not block the final model from starting after the utterance endpoint.
+
+Continuous voice mode can optionally generate idle speech after silent listening timeouts. `idle_speech.interval_seconds` is multiplied by a random factor between `idle_speech.random_min_multiplier` and `idle_speech.random_max_multiplier`; the checked-in profiles use 100s with a 1x-5x multiplier. The idle prompt is loaded from hardcoded profile-relative `idle.md`. Empty captures with no live preview text do not reset the idle timer; any non-empty transcript is treated as a user turn.
+
+## Technical Details
+
+The cascaded design is intentional. End-to-end speech-to-speech models may become useful later, but they make tool safety, logging, memory, and debugging harder.
+
+Tool calls use plain JSON shaped like:
 
 ```json
 {"tool_calls":[{"name":"get_time","arguments":{}}]}
 ```
 
-The agent executes at most one tool round by default, then sends the tool results back to the LLM and asks for a brief natural-language answer.
+The agent executes at most one normal LLM tool round before asking for a natural-language answer. Deterministic commands such as explicit memory writes can be routed before the LLM so they behave predictably.
 
-This avoids giving the LLM direct shell access and keeps tool behavior inspectable.
+Online services are checked independently at startup. The assistant uses the online LLM only when that configured endpoint is reachable, uses remote STT only when the remote STT health check passes, and registers `web_search` only when the profile enables it, `BRAVE_SEARCH_API_KEY` is set, and a short internet probe succeeds. If the search check fails, `web_search` is omitted from the tool registry and is not shown to the LLM.
 
-For basic local facts, the agent also has a deterministic pre-router. Questions containing whole-word `time`, `date`, `status`, or `battery` are routed to local tools before the LLM answers. Calculator-style requests are routed to the local calculator. This prevents small models from inventing local state or arithmetic.
-
-Current tools:
-
-- `get_time`
-- `robot_status`
-- `set_eye_expression`
-- `calculator`
-- `remember`
-- `take_photo`, only if a camera command is configured
-- `run_safe_cli_tool`, only for commands explicitly listed in config
-- `web_search`, only if enabled and backed by a configured provider
-- `fetch_url`, only if enabled; blocks private/local network targets by default
-
-Web access stays in explicit tools. Search uses a configured provider API instead of scraping search-engine result pages. URL fetching is separate from search, returns cleaned text/markdown-like content, and is not a shell or browser tool. The notes-search tool was removed from the active registry.
-
-## Streaming
-
-The Ollama adapter uses `/api/chat` with `stream: true` and `think: false`. Text tokens are printed as they arrive.
-
-For speech, `StreamingSpeaker` buffers the generated text and queues short sentence-like segments to TTS. This lets Piper or Edge TTS start speaking before the full LLM response is complete. It is not true token-level speech synthesis, but it reduces perceived delay without changing the model.
-
-Streaming TTS now uses a two-stage pipeline when the backend supports it:
-
-- Stage 1 prepares audio files for upcoming text chunks.
-- Stage 2 plays prepared chunks in-order.
-
-This allows chunk `N+1` to synthesize while chunk `N` is playing, which reduces the "first words, then pause" effect from single-thread chunk processing. A small startup prebuffer (`stream_playback_prebuffer_chunks` with `stream_playback_prebuffer_max_wait_seconds`) helps avoid immediate underruns without waiting for the full answer.
-
-The first spoken chunk is adaptive and has a separate threshold from later chunks. The default profile now uses a low first-chunk target, short timeout, and moderate later chunk size so voice starts quickly while avoiding one-word fragments.
-
-There is also an upper bound on the first wait. If `stream_max_initial_wait_seconds` expires, the speaker queues the first complete sentence. If no sentence boundary exists yet, it queues `stream_feedback_min_words` words. This gives audible feedback on slow hardware even when the next chunk may need to wait for more generated text.
-
-Later chunks have their own timeout (`stream_max_inter_chunk_wait_seconds`). If the next segment would otherwise wait too long for `stream_min_words`, the speaker emits a shorter `stream_feedback_min_words` chunk to keep speech continuous.
-
-When speech output is enabled, CLI turns use the streaming path even if token-by-token text printing is disabled. `--stream` controls terminal text streaming; speech streaming follows `tts.stream_speech`.
-
-Speech-interrupt verification can run without pausing playback (`speech_interrupt_pause_tts_while_verifying: false`), which avoids regular chunk-boundary stalls when interrupt candidates are false positives.
-
-Tool JSON is held back until complete so partial JSON is not printed or spoken.
-
-## Latency Strategy
-
-For live voice, optimize in this order:
-
-1. Keep replies short, usually 40-80 tokens.
-2. Disable thinking mode for normal conversation.
-3. Stream LLM tokens.
-4. Start TTS after the first complete phrase or short chunk.
-5. Use a 4B-class model before trying larger MoE models.
-6. Use scripted instant reactions for acknowledgements if needed.
-
-## Runtime State
-
-Runtime outputs are intentionally separated from source:
-
-- `profiles/<profile>/runtime/logs/turns.jsonl`: append-only conversation log with per-turn active LLM `model_name` and tool results.
-- `profiles/<profile>/runtime/logs/tools.jsonl`: append-only tool audit log with request arguments, results, source, and duration.
-- `profiles/<profile>/runtime/state/eye.json`: current eye expression state.
-- `profiles/<profile>/runtime/state/memory_state.json`: automatic memory refresh state.
-- `profiles/<profile>/runtime/state/memory_candidates.jsonl`: compact evidence for later memory consolidation.
-- `profiles/<profile>/runtime/audio/`: recorded utterances, partial STT snapshots, and generated speech. Runtime audio files are kept and never auto-deleted by the app.
-
-These files are ignored by git.
+Profile-local paths are derived from the profile folder. Copied profiles remain portable because `system.md`, `user.md`, `memory.md`, and `runtime/` always live beside that profile's `config.jsonc`.

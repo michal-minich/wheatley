@@ -1,84 +1,69 @@
-# Hardware And Model Notes
+# Hardware And Models
 
-This project is being built on a development machine first, then copied to the target robot hardware.
+This project is designed to become useful on modest local hardware before chasing large models. The first target is a responsive English assistant that runs locally with small models and clear fallbacks.
 
-## 8 GB Target Profile
+## First Local English Setup
 
-Expected constraints:
-
-- RAM: 8 GB total.
-- Power: power bank or battery.
-- Priority: response latency and stability.
-- Secondary: future camera and tool use.
-
-## First Model Matrix
-
-| Role | Default | Reason |
+| Role | Recommended first choice | Why |
 | --- | --- | --- |
-| VAD | simple RMS VAD | zero dependency baseline |
-| STT | remote_fallback to Janka Mac, local small.en/turbo fallback | lower robot RAM while keeping offline degradation |
-| LLM | Qwen3.5-4B Q4/Q5 | best first 8 GB quality/latency tradeoff |
-| TTS | Kokoro or Piper | local, fast, simple |
-| Filter | ffmpeg light preset | character voice without model coupling |
+| LLM | `qwen3.5:4b` through Ollama | Small enough to start on 8 GB class machines, capable enough for tools and short answers. |
+| STT | faster-whisper preview `small` + final `distil-large-v3` int8 | Fast live preview with higher quality endpoint transcription. |
+| TTS | Piper `en_GB-alan-medium` | Local speech output with simple files and no service dependency. |
+| Playback | `afplay`, `aplay`, or `ffplay` | Uses common OS playback tools. |
 
-## Current STT Split
+The default profile may contain stronger or experimental settings. For a new local-only setup, follow [Local English Startup](local-english-startup.md) and start conservative.
 
-| Language | Remote STT target | Local fallback | Reason |
-| --- | --- | --- | --- |
-| English | `small.en` | `small.en` int8 | current quality is enough; optimize for latency |
-| Slovak | `models/whisper/whisper-large-v3-sk-ct2-int8`, converted from `NaiveNeuron/whisper-large-v3-sk` | `whisper-large-v3-turbo-sk-ct2-int8` | use the best larger Slovak model when Janka Mac is reachable |
+## Hardware Expectations
 
-Remote STT and remote LLM are independent. The robot can use either service, both services, or neither service depending on what is reachable.
+8 GB RAM:
 
-Memory planning:
+- Use a small LLM.
+- Use multilingual `small` for STT preview first.
+- Keep answers short.
+- Expect CPU-only STT to be the main latency cost.
 
-| Robot mode | Practical RAM target | Notes |
-| --- | --- | --- |
-| Remote STT + remote LLM | 4-8 GB | robot mostly records audio, routes requests, and speaks |
-| Remote STT + local 4B LLM | 8-16 GB | good 8 GB target if local STT fallback stays small |
-| Local STT + local 4B LLM | 16 GB minimum | Slovak fallback can be tight on 8 GB |
-| Strong local Slovak STT + local 4B LLM | 32 GB comfortable | avoids relying on Janka Mac |
+16 GB RAM:
 
-## Alternatives To Test
+- More comfortable for the same setup.
+- Lets you test larger STT models or larger LLM quantizations.
 
-| Role | Candidate | Why |
-| --- | --- | --- |
-| STT | Whisper medium | better accent tolerance |
-| STT | multilingual Whisper | code switching and Slovak-accented English |
-| STT | whisper.cpp Metal/CoreML small.en | macOS-only acceleration for English with similar quality |
-| STT | MLX Whisper | Apple Silicon experiment, especially for stock Whisper models |
-| STT | Nemotron Speech Streaming 0.6B | low-latency English on NVIDIA |
-| STT | Parakeet TDT 0.6B v3 | multilingual, includes Slovak |
-| LLM | Gemma 4 E2B | very low memory edge mode |
-| LLM | Gemma 4 E4B | multimodal edge experiment |
-| LLM | Phi-4-mini | English reasoning fallback |
-| TTS | Piper sk_SK-lili-medium | Slovak mode later |
+32 GB+ RAM:
 
-## Not A Default On 8 GB
+- Useful for "smart mode" experiments.
+- Better fit for larger local LLMs and heavier STT.
 
-Qwen3.6-35B-A3B:
-
-- Good future smart-mode candidate.
-- Not an 8 GB default because quantized weights exceed practical RAM.
-- Consider on 32 GB+ hardware.
-
-Voxtral Mini Realtime:
-
-- Interesting realtime STT.
-- Too heavy to combine casually with a 4B LLM and TTS on 8 GB.
-
-End-to-end speech-to-speech:
-
-- Interesting for natural interruption and prosody.
-- Deferred until the cascaded pipeline is stable.
-
-## Hardware Shortlist
+## Good Development Machines
 
 | Hardware | Fit |
 | --- | --- |
-| Intel N100/N150 8-16 GB | best cheap x86 prototype |
-| Intel N100/N150 32 GB | useful bridge, still not ideal for 35B MoE |
-| Ryzen 5700U/5800U 32 GB | budget smart-mode experiment |
-| Ryzen 7840U/8845HS 64 GB | strong local AI mini-PC |
-| Jetson Orin Nano 8 GB | camera/CUDA body, not big LLM brain |
-| Raspberry Pi 5 | controller or minimal mode |
+| Apple Silicon Mac, 16 GB+ | Good development machine with fast local LLM support through Ollama. |
+| Intel N100/N150 mini PC, 8-16 GB | Good cheap Linux prototype for local English mode. |
+| Ryzen mini PC, 32 GB+ | Good local smart-mode test box. |
+| Raspberry Pi 5 | Better as a device controller than as the main LLM machine. |
+| Jetson Orin Nano 8 GB | Useful for camera/CUDA experiments, but RAM is still tight for a full local voice stack. |
+
+## Model Selection Rules
+
+- Prefer a model that answers quickly over a model that benchmarks higher.
+- Disable thinking/reasoning output for live voice.
+- Keep normal voice answers short.
+- Test STT with natural speech, not only clean dictation.
+- Do not commit model weights. Put them under `models/`.
+
+## Observed Model Notes
+
+The current STT path is two-phase. Live partial preview uses multilingual `small` with CPU int8 and beam size 1. Endpoint final transcription uses `distil-large-v3` with CPU int8 and beam size 3. Remote preview/final can be enabled independently, but both phases fall back to the local preview model when the configured remote endpoint is unavailable.
+
+Current local benchmark on 16 saved utterances: preview averages about 1.14s warm transcription time, final averages about 3.47s, and sequential preview+final totals about 4.61s. In real voice use the preview work happens during recording; perceived post-speech STT latency is dominated by the active profile's endpoint silence plus the final `distil-large-v3` pass. Profiles can trade off longer pause-and-think endpointing against lower latency.
+
+Non-English modes can keep STT local: preview can use multilingual `small` with a language hint and beam 1; final can use a stronger local Whisper model with beam 3. `lmstudio-community/gemma-4-31b-it` is a useful smart-mode candidate for stronger hardware.
+
+The first streamed TTS chunk can be fixed per profile. Adaptive first-chunk sizing is disabled by default because it can drift from per-profile runtime stats and make startup latency feel inconsistent.
+
+`lmstudio-community/gemma-4-31b-it` works very well as a stronger chat model in LM Studio. It has been good for both English and Slovak. Treat it as a smart-model option for stronger hardware, not as the required local startup model.
+
+## Technical Details
+
+Qwen3.6-35B-A3B remains a future experiment, not a default. Even with sparse activation, the weights still need much more memory than an 8 GB target can comfortably provide.
+
+Larger Whisper models can improve accuracy in some non-English, accented, or noisy cases, but they increase startup time, RAM use, and CPU latency. Keep them in the endpoint final path or background correction path, not in live preview.

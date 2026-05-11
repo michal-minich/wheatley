@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wheatley"
 version = "0.1.0"
-description = "Offline-first voice agent pipeline for a small Wheatley-style robot."
+description = "Offline-first voice agent pipeline for a offline first voice assistant."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Wheatley project" }]

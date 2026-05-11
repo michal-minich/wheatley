@@ -61,6 +61,42 @@ class TTSBackendTests(unittest.TestCase):
             )
             self.assertEqual(prepared.audio_path, expected_output)
 
+    def test_piper_pronunciation_replacements_change_spoken_text_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = Config()
+            cfg.tts.enabled = True
+            cfg.tts.playback = False
+            cfg.tts.output_dir = tmp
+            cfg.tts.piper_binary = ".venv/bin/python"
+            cfg.tts.piper_pronunciation_replacements = {
+                r"(?i)\bexample\b": "sample"
+            }
+            backend = PiperTTS(cfg)
+
+            captured: dict[str, str] = {}
+
+            def fake_run(command, **kwargs):
+                del command
+                captured["input"] = kwargs["input"]
+
+                class Completed:
+                    returncode = 0
+                    stderr = ""
+
+                return Completed()
+
+            expected_output = Path(tmp) / "out.wav"
+            with mock.patch("wheatley.tts.backends.subprocess.run", side_effect=fake_run):
+                with mock.patch(
+                    "wheatley.tts.backends._postprocess_audio",
+                    return_value=expected_output,
+                ):
+                    prepared = backend.prepare_for_playback("Hello example.")
+
+            self.assertEqual(captured["input"], "Hello sample.")
+            self.assertEqual(prepared.text, "Hello example.")
+            self.assertEqual(prepared.audio_path, expected_output)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,16 @@
 import unittest
+import tempfile
+from pathlib import Path
 
-from wheatley.llm.backends import _filter_reasoning_stream, _openai_endpoint_url, _strip_reasoning
+from wheatley.llm.backends import (
+    _filter_reasoning_stream,
+    _ollama_messages,
+    _openai_endpoint_url,
+    _openai_messages,
+    _strip_reasoning,
+    model_supports_images,
+)
+from wheatley.llm.base import LLMImage, LLMMessage
 
 
 class LLMBackendTests(unittest.TestCase):
@@ -36,6 +46,55 @@ class LLMBackendTests(unittest.TestCase):
     def test_stream_filter_releases_short_normal_text(self):
         chunks = ["Ok", "."]
         self.assertEqual("".join(_filter_reasoning_stream(iter(chunks))), "Ok.")
+
+    def test_model_supports_images_uses_model_name_hints(self):
+        self.assertTrue(model_supports_images("lmstudio-community/gemma-4-31b-it"))
+        self.assertTrue(model_supports_images("qwen2.5-vl:7b"))
+        self.assertFalse(model_supports_images("qwen3.5:4b"))
+        self.assertFalse(model_supports_images("qwen3.6-35b-a3b-ud-mlx"))
+
+    def test_ollama_messages_attach_base64_images_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "photo.jpg"
+            image.write_bytes(b"abc")
+            messages = [
+                LLMMessage(
+                    "user",
+                    "what is this?",
+                    images=[LLMImage(path=str(image), mime_type="image/jpeg")],
+                )
+            ]
+
+            self.assertEqual(
+                _ollama_messages(messages, include_images=True)[0]["images"],
+                ["YWJj"],
+            )
+            self.assertNotIn("images", _ollama_messages(messages, include_images=False)[0])
+
+    def test_openai_messages_attach_data_url_images_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "photo.jpg"
+            image.write_bytes(b"abc")
+            messages = [
+                LLMMessage(
+                    "user",
+                    "what is this?",
+                    images=[LLMImage(path=str(image), mime_type="image/jpeg")],
+                )
+            ]
+
+            content = _openai_messages(messages, include_images=True)[0]["content"]
+
+            self.assertEqual(content[0], {"type": "text", "text": "what is this?"})
+            self.assertEqual(content[1]["type"], "image_url")
+            self.assertEqual(
+                content[1]["image_url"]["url"],
+                "data:image/jpeg;base64,YWJj",
+            )
+            self.assertEqual(
+                _openai_messages(messages, include_images=False)[0]["content"],
+                "what is this?",
+            )
 
 
 if __name__ == "__main__":

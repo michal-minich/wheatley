@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import subprocess
+import threading
 import urllib.error
 import urllib.request
 import uuid
@@ -25,6 +26,7 @@ class FasterWhisperSTT(STTBackend):
     def __init__(self, cfg: STTConfig):
         self.cfg = cfg
         self._model = None
+        self._lock = threading.Lock()
 
     def transcribe(self, audio_path: Optional[Path] = None) -> Transcription:
         if not audio_path:
@@ -36,29 +38,30 @@ class FasterWhisperSTT(STTBackend):
                 "Install faster-whisper first: pip install '.[stt]'"
             ) from exc
 
-        if self._model is None:
-            self._model = WhisperModel(
-                self.cfg.model,
-                device=self.cfg.device,
-                compute_type=self.cfg.compute_type,
+        with self._lock:
+            if self._model is None:
+                self._model = WhisperModel(
+                    self.cfg.model,
+                    device=self.cfg.device,
+                    compute_type=self.cfg.compute_type,
+                )
+            segments, info = self._model.transcribe(
+                str(audio_path),
+                language=self.cfg.language,
+                task="transcribe",
+                beam_size=self.cfg.beam_size,
+                repetition_penalty=1.15,
+                no_repeat_ngram_size=3,
+                max_new_tokens=160,
+                vad_filter=self.cfg.vad_filter,
+                condition_on_previous_text=self.cfg.condition_on_previous_text,
             )
-        segments, info = self._model.transcribe(
-            str(audio_path),
-            language=self.cfg.language,
-            task="transcribe",
-            beam_size=1,
-            repetition_penalty=1.15,
-            no_repeat_ngram_size=3,
-            max_new_tokens=160,
-            vad_filter=True,
-            condition_on_previous_text=False,
-        )
-        text = " ".join(segment.text.strip() for segment in segments).strip()
-        return Transcription(
-            text=text,
-            language=getattr(info, "language", None),
-            duration_seconds=getattr(info, "duration", None),
-        )
+            text = " ".join(segment.text.strip() for segment in segments).strip()
+            return Transcription(
+                text=text,
+                language=getattr(info, "language", None),
+                duration_seconds=getattr(info, "duration", None),
+            )
 
 
 class RemoteFallbackSTT(STTBackend):

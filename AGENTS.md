@@ -4,7 +4,7 @@ This repo is the local-first Wheatley voice-agent project. Keep changes pragmati
 
 ## Project Intent
 
-Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 8 GB class machine first. The first target is reliable latency and tool use, not maximum benchmark intelligence.
+Build a fast offline `audio -> text -> LLM -> TTS` assistant that fits an 8 GB class machine first. The first target is reliable latency and tool use, not maximum benchmark intelligence.
 
 ## Current Architecture
 
@@ -13,7 +13,7 @@ Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 
 - Config format: JSONC profile folder under `profiles/wheatley/`.
 - Editable prompts live beside each profile config as `system.md`, `user.md`, and `tools.jsonc`.
 - Persistent memory lives beside each profile config as `memory.md` and is injected into the system prompt.
-- Runtime files live under `runtime/<profile>/` by convention.
+- Runtime files live beside each profile under `profiles/<profile>/runtime/`.
 - Tests use stdlib `unittest` and should run without external model downloads.
 
 ## Hard Rules
@@ -26,6 +26,7 @@ Build a fast offline `audio -> text -> LLM -> TTS` robot assistant that fits an 
 - Keep Qwen3.6-35B-A3B as a documented future experiment, not a default runtime.
 - Keep docs updated when model, hardware, latency, or tool decisions change.
 - Do not commit downloaded model weights into this repo. Use `models/`, which is ignored.
+- When changing profile runtime settings during development, keep any local alternate profiles aligned for the settings you changed. Do not overwrite unrelated intentional profile differences unless the user explicitly asks for a full profile sync.
 
 ## Concurrent Editing Policy (High Priority)
 
@@ -51,7 +52,7 @@ Before handing back changes, run:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 PYTHONPATH=src python3 -m wheatley doctor
-PYTHONPATH=src python3 -m wheatley once --text "what time is it?"
+PYTHONPATH=src python3 -m wheatley --profile test once --text "what time is it?"
 ```
 
 If external dependencies or models are unavailable, note that clearly and keep the echo backend smoke tests passing.

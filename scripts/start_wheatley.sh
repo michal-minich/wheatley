@@ -14,4 +14,6 @@ if [ -f ".env" ]; then
   set +a
 fi
 
-exec env PYTHONPATH=src "$PYTHON_BIN" -m wheatley voice
+PROFILE="${WHEATLEY_PROFILE:-wheatley}"
+
+exec env PYTHONPATH=src "$PYTHON_BIN" -m wheatley --profile "$PROFILE" voice

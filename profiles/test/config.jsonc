@@ -1,0 +1,310 @@
+{
+  // Deterministic profile for tests and smoke checks. Runtime files stay under
+  // profiles/test/runtime/ so they cannot feed the real Wheatley memory.
+  "runtime": {
+    "default_language": "en"
+  },
+  "chat": {
+    "resume_on_start": false,
+    "resume_turns": 0,
+    "resume_countdown_seconds": 0
+  },
+  "idle_speech": {
+    "enabled": false,
+    "interval_seconds": 0.0,
+    "random_min_multiplier": 1.0,
+    "random_max_multiplier": 1.0
+  },
+  "audio": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "vad_threshold": 0.02,
+    "min_speech_seconds": 0.2,
+    "silence_seconds": 1.0,
+    "pre_roll_seconds": 0.1,
+    "trailing_silence_keep_seconds": 0.2,
+    "max_utterance_seconds": 5.0,
+    "max_wait_seconds": 2.0,
+    "partial_transcript_enabled": false,
+    "partial_transcript_interval_seconds": 0.0,
+    "partial_transcript_min_audio_seconds": 0.0,
+    "partial_transcript_use_as_final": false,
+    "partial_transcript_final_max_age_seconds": 0.0,
+    "listening_chimes_enabled": false,
+    "listening_chime_volume": 0.0,
+    "speech_interrupt_enabled": false,
+    "speech_interrupt_phrase": "stop",
+    "speech_interrupt_min_rms": 0.0,
+    "speech_interrupt_vad_multiplier": 0.0,
+    "speech_interrupt_baseline_multiplier": 0.0,
+    "speech_interrupt_grace_seconds": 0.0,
+    "speech_interrupt_pre_roll_seconds": 0.0,
+    "speech_interrupt_record_seconds": 0.0,
+    "speech_interrupt_max_words": 0,
+    "speech_interrupt_pause_tts_while_verifying": false
+  },
+  "stt": {
+    "backend": "keyboard",
+    "model": "small",
+    "language": "en",
+    "device": "cpu",
+    "compute_type": "int8",
+    "beam_size": 1,
+    "vad_filter": true,
+    "condition_on_previous_text": false,
+    "preview_model": "small",
+    "preview_remote_model": "small",
+    "preview_use_remote": false,
+    "preview_beam_size": 1,
+    "final_model": "distil-large-v3",
+    "final_remote_model": "distil-large-v3",
+    "final_use_remote": false,
+    "final_beam_size": 3,
+    "whisper_cpp_binary": "",
+    "whisper_cpp_model": "",
+    "whisper_cpp_args": [],
+    "remote_base_url": "",
+    "remote_api_key": "",
+    "remote_model": "",
+    "remote_probe_timeout_seconds": 0.0,
+    "remote_request_timeout_seconds": 0.0,
+    "remote_fallback_backend": "keyboard"
+  },
+  "language": {
+    "enabled": false,
+    "default": "en",
+    "persist": false,
+    "languages": {}
+  },
+  "llm": {
+    "backend": "echo",
+    "model": "echo",
+    "base_url": "",
+    "api_key": "",
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "max_tokens": 256,
+    "timeout_seconds": 5.0,
+    "context_turns": 4,
+    "enable_thinking": false,
+    "strip_reasoning": false,
+    "remote": {
+      "enabled": false,
+      "backend": "",
+      "base_url": "",
+      "model": "",
+      "api_key": "",
+      "probe_timeout_seconds": 0.0,
+      "request_timeout_seconds": 0.0,
+      "online_message": "",
+      "offline_message": "using test echo model"
+    }
+  },
+  "tts": {
+    "backend": "none",
+    "enabled": false,
+    "voice": "",
+    "playback": false,
+    "playback_command": null,
+    "piper_binary": "",
+    "piper_model": "",
+    "piper_config": null,
+    "piper_speaker": null,
+    "edge_voice": "",
+    "edge_rate": "",
+    "edge_pitch": "",
+    "edge_volume": "",
+    "length_scale": 1.0,
+    "noise_scale": 0.0,
+    "noise_w_scale": 0.0,
+    "sentence_silence": 0.0,
+    "volume": 1.0,
+    "leading_silence_ms": 0,
+    "stream_speech": false,
+    "adaptive_streaming": false,
+    "stream_initial_min_words": 1,
+    "stream_min_words": 8,
+    "stream_max_words": 20,
+    "stream_feedback_min_words": 0,
+    "stream_max_initial_wait_seconds": 0.0,
+    "stream_max_inter_chunk_wait_seconds": 0.0,
+    "stream_playback_prebuffer_chunks": 0,
+    "stream_playback_prebuffer_max_wait_seconds": 0.0,
+    "external_command": null,
+    "filter": {
+      "enabled": false,
+      "ffmpeg_binary": "",
+      "preset": ""
+    }
+  },
+  "tools": {
+    "enabled": true,
+    "current_tools_message": {
+      "en": "Current tools are: {tools}.",
+      "sk": "Aktuálne nástroje sú: {tools}."
+    },
+    "tool_list_conjunction": {
+      "en": "and",
+      "sk": "a"
+    },
+    "tool_settings": {
+      "get_time": {
+        "enabled": true,
+        "description": "Test get time without uptime.",
+        "labels": {
+          "en": "time",
+          "sk": "čas"
+        },
+        "start_messages": {
+          "en": "Checking time...",
+          "sk": "Kontrolujem čas..."
+        }
+      },
+      "system_status": {
+        "enabled": true,
+        "description": "Test system status with uptime.",
+        "labels": {
+          "en": "system status",
+          "sk": "stav systému"
+        },
+        "start_messages": {
+          "en": "Checking status...",
+          "sk": "Kontrolujem stav..."
+        }
+      },
+      "set_eye_expression": {
+        "enabled": false,
+        "description": "Test eye state.",
+        "labels": {
+          "en": "eye expression",
+          "sk": "výraz očí"
+        },
+        "start_messages": {
+          "en": "Setting expression...",
+          "sk": "Nastavujem výraz..."
+        }
+      },
+      "calculator": {
+        "enabled": true,
+        "description": "Test calculator.",
+        "labels": {
+          "en": "calculator",
+          "sk": "kalkulačka"
+        },
+        "start_messages": {
+          "en": "Calculating...",
+          "sk": "Počítam..."
+        }
+      },
+      "remember": {
+        "enabled": false,
+        "description": "Test remember.",
+        "labels": {
+          "en": "memory",
+          "sk": "pamäť"
+        },
+        "start_messages": {
+          "en": "Remembering...",
+          "sk": "Zapamätávam..."
+        }
+      },
+      "set_language": {
+        "enabled": false,
+        "description": "Test language switch.",
+        "labels": {
+          "en": "language switching",
+          "sk": "prepínanie jazyka"
+        },
+        "start_messages": {
+          "en": "Switching language...",
+          "sk": "Prepínam jazyk..."
+        }
+      },
+      "take_photo": {
+        // Disabled: the echo test profile is text-only.
+        "enabled": false,
+        "description": "Test camera.",
+        "labels": {
+          "en": "camera",
+          "sk": "kamera"
+        },
+        "start_messages": {
+          "en": "Taking photo...",
+          "sk": "Fotím..."
+        }
+      },
+      "run_safe_cli_tool": {
+        "enabled": false,
+        "description": "Test CLI tool.",
+        "labels": {
+          "en": "safe commands",
+          "sk": "bezpečné príkazy"
+        },
+        "start_messages": {
+          "en": "Running...",
+          "sk": "Spúšťam..."
+        }
+      },
+      "web_search": {
+        "enabled": false,
+        "description": "Test web search.",
+        "labels": {
+          "en": "web search",
+          "sk": "webové vyhľadávanie"
+        },
+        "start_messages": {
+          "en": "Searching...",
+          "sk": "Hľadám..."
+        }
+      },
+      "python_interpreter": {
+        "enabled": false,
+        "description": "Test Python scratchpad.",
+        "labels": {
+          "en": "Python scratchpad",
+          "sk": "Python poznámkový blok"
+        },
+        "start_messages": {
+          "en": "Running Python...",
+          "sk": "Spúšťam Python..."
+        },
+        "instructions": "Do not import modules in model code; assign final output to result."
+      }
+    },
+    "allowed_commands": {},
+    "photo_command": null,
+    "photo_short_side": 640,
+    "photo_quality": 75,
+    "photo_timeout_seconds": 8.0,
+    "web_search_max_results": 0,
+    "web_search_timeout_seconds": 0.0,
+    "python_interpreter_timeout_seconds": 30.0,
+    "python_interpreter_max_stdout_chars": 4000,
+    "python_interpreter_max_stderr_chars": 2000,
+    "python_interpreter_max_result_chars": 8000,
+    "python_interpreter_memory_limit_mb": 256,
+    "python_interpreter_file_size_limit_mb": 1,
+    "python_interpreter_read_roots": [
+      "files"
+    ]
+  },
+  "agent": {
+    "default_response_language": "English"
+  },
+  "memory": {
+    "auto_enabled": false,
+    "consolidation_enabled": false,
+    "include_assistant_text_online": false,
+    "include_assistant_text_offline": false,
+    "full_rewrite_interval_days": 0,
+    "full_rewrite_requires_online": false,
+    "full_rewrite_recent_days": 1,
+    "max_turns_per_update": 0,
+    "max_candidates_for_rewrite": 0,
+    "max_total_words": 0,
+    "max_stable_facts": 0,
+    "max_preferences": 0,
+    "max_current_projects": 0,
+    "max_recent_context": 0
+  }
+}

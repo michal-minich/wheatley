@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import re
 import urllib.error
 import urllib.request
-from typing import Iterator, List
+from pathlib import Path
+from typing import Any, Iterator, List
 
 from wheatley.config import LLMConfig, RemoteLLMConfig
-from wheatley.llm.base import LLMBackend, LLMMessage, LLMResponse
+from wheatley.llm.base import LLMBackend, LLMImage, LLMMessage, LLMResponse
 
 
 class EchoLLM(LLMBackend):
@@ -22,7 +25,7 @@ class EchoLLM(LLMBackend):
             payload = {"tool_calls": [{"name": "get_time", "arguments": {}}]}
             return LLMResponse(json.dumps(payload))
         if "battery" in lowered or "status" in lowered:
-            payload = {"tool_calls": [{"name": "robot_status", "arguments": {}}]}
+            payload = {"tool_calls": [{"name": "system_status", "arguments": {}}]}
             return LLMResponse(json.dumps(payload))
         return LLMResponse("I heard: " + _compact(last))
 
@@ -36,10 +39,13 @@ class OllamaLLM(LLMBackend):
     def __init__(self, cfg: LLMConfig):
         self.cfg = cfg
 
+    def supports_images(self) -> bool:
+        return model_supports_images(self.cfg.model)
+
     def complete(self, messages: List[LLMMessage]) -> LLMResponse:
         payload = {
             "model": self.cfg.model,
-            "messages": [m.to_dict() for m in messages],
+            "messages": _ollama_messages(messages, include_images=self.supports_images()),
             "stream": False,
             "think": bool(self.cfg.enable_thinking),
             "options": {
@@ -59,7 +65,7 @@ class OllamaLLM(LLMBackend):
     def stream_complete(self, messages: List[LLMMessage]) -> Iterator[str]:
         payload = {
             "model": self.cfg.model,
-            "messages": [m.to_dict() for m in messages],
+            "messages": _ollama_messages(messages, include_images=self.supports_images()),
             "stream": True,
             "think": bool(self.cfg.enable_thinking),
             "options": {
@@ -79,16 +85,17 @@ class OpenAICompatLLM(LLMBackend):
     def __init__(self, cfg: LLMConfig):
         self.cfg = cfg
 
+    def supports_images(self) -> bool:
+        return model_supports_images(self.cfg.model)
+
     def complete(self, messages: List[LLMMessage]) -> LLMResponse:
         payload = {
             "model": self.cfg.model,
-            "messages": [m.to_dict() for m in messages],
+            "messages": _openai_messages(messages, include_images=self.supports_images()),
             "temperature": self.cfg.temperature,
             "top_p": self.cfg.top_p,
             "max_tokens": self.cfg.max_tokens,
         }
-        if self.cfg.backend.lower() in {"vllm", "sglang"} and not self.cfg.enable_thinking:
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.cfg.api_key}",
@@ -112,14 +119,12 @@ class OpenAICompatLLM(LLMBackend):
     def stream_complete(self, messages: List[LLMMessage]) -> Iterator[str]:
         payload = {
             "model": self.cfg.model,
-            "messages": [m.to_dict() for m in messages],
+            "messages": _openai_messages(messages, include_images=self.supports_images()),
             "temperature": self.cfg.temperature,
             "top_p": self.cfg.top_p,
             "max_tokens": self.cfg.max_tokens,
             "stream": True,
         }
-        if self.cfg.backend.lower() in {"vllm", "sglang"} and not self.cfg.enable_thinking:
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.cfg.api_key}",
@@ -142,9 +147,90 @@ def build_llm(cfg: LLMConfig) -> LLMBackend:
         return EchoLLM()
     if backend == "ollama":
         return OllamaLLM(cfg)
-    if backend in {"openai", "openai_compat", "llama_cpp", "vllm", "sglang"}:
+    if backend in {"openai", "openai_compat", "llama_cpp"}:
         return OpenAICompatLLM(cfg)
     raise ValueError(f"Unsupported LLM backend: {cfg.backend}")
+
+
+VISION_MODEL_NAME_HINTS = (
+    "llava",
+    "bakllava",
+    "moondream",
+    "minicpm-v",
+    "minicpmv",
+    "minicpm-o",
+    "qwen-vl",
+    "qwen2-vl",
+    "qwen2.5-vl",
+    "qwen2.5vl",
+    "qwenvl",
+    "pixtral",
+    "paligemma",
+    "mllama",
+    "llama-3.2-vision",
+    "llama3.2-vision",
+    "gemma-3",
+    "gemma3",
+    "gemma-4",
+    "gemma4",
+    "gpt-4o",
+    "gpt-4.1",
+    "gpt-5",
+    "claude-3",
+)
+
+
+def model_supports_images(model: str) -> bool:
+    normalized = model.lower().replace("_", "-")
+    return bool(normalized) and any(
+        hint in normalized for hint in VISION_MODEL_NAME_HINTS
+    )
+
+
+def _ollama_messages(
+    messages: List[LLMMessage],
+    *,
+    include_images: bool,
+) -> List[dict]:
+    serialized = []
+    for message in messages:
+        item: dict[str, Any] = {"role": message.role, "content": message.content}
+        if include_images and message.images:
+            item["images"] = [_image_base64(image.path) for image in message.images]
+        serialized.append(item)
+    return serialized
+
+
+def _openai_messages(
+    messages: List[LLMMessage],
+    *,
+    include_images: bool,
+) -> List[dict]:
+    serialized = []
+    for message in messages:
+        if include_images and message.images:
+            content: list[dict[str, Any]] = []
+            if message.content:
+                content.append({"type": "text", "text": message.content})
+            for image in message.images:
+                image_payload = {
+                    "url": _image_data_url(image),
+                    "detail": image.detail or "low",
+                }
+                content.append({"type": "image_url", "image_url": image_payload})
+            serialized.append({"role": message.role, "content": content})
+        else:
+            serialized.append({"role": message.role, "content": message.content})
+    return serialized
+
+
+def _image_data_url(image: LLMImage) -> str:
+    mime_type = image.mime_type or mimetypes.guess_type(image.path)[0] or "image/jpeg"
+    return f"data:{mime_type};base64,{_image_base64(image.path)}"
+
+
+def _image_base64(path: str) -> str:
+    return base64.b64encode(Path(path).read_bytes()).decode("ascii")
 
 
 def remote_llm_available(cfg: RemoteLLMConfig) -> bool:
@@ -345,7 +431,7 @@ def _summarize_tool_results(text: str) -> str:
     content = first.get("content", {})
     if name == "get_time" and "iso" in content:
         return f"Local time is {content['iso']}."
-    if name == "robot_status":
+    if name == "system_status":
         return (
             "Status is local and running. "
             f"LLM is {content.get('llm_backend')}, STT is {content.get('stt_backend')}."

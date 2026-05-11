@@ -39,6 +39,9 @@ class ToolRegistry:
     def specs(self) -> List[ToolSpec]:
         return list(self._specs.values())
 
+    def has_tool(self, name: str) -> bool:
+        return name in self._handlers
+
     def update_spec(
         self,
         name: str,

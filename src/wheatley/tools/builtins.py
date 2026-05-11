@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import ast
+import json
 import math
 import operator
 import platform
@@ -12,37 +12,52 @@ from pathlib import Path
 from typing import Dict
 
 from wheatley.config import Config
-from wheatley.language import language_status_payload, set_language_state
-from wheatley.prompting import load_tool_overrides
+from wheatley.language import language_status_payload
+from wheatley.prompting import load_tool_overrides_from_config
+from wheatley.tools.photo import take_photo
+from wheatley.tools.python_interpreter import python_interpreter
 from wheatley.tools.registry import ToolRegistry, ToolResult, ToolSpec
-from wheatley.tools.web import fetch_url, web_search
+from wheatley.tools.web import web_search, web_search_available
 
 STARTED_AT = time.time()
 
 
 def build_registry(cfg: Config) -> ToolRegistry:
     registry = ToolRegistry()
+    overrides = load_tool_overrides_from_config(cfg)
 
-    registry.register(
+    def register(spec: ToolSpec, handler) -> None:
+        if cfg.tools.is_tool_enabled(spec.name):
+            registry.register(spec, handler)
+
+    def tool_description(name: str, fallback: str) -> str:
+        override = overrides.get(name, {})
+        description = str(override.get("description", "")).strip()
+        return description or fallback
+
+    register(
         ToolSpec(
             name="get_time",
-            description="Return local date, time, timezone and uptime.",
+            description=tool_description("get_time", "Return local date/time details."),
             parameters={"type": "object", "properties": {}},
         ),
         lambda args: _get_time(),
     )
-    registry.register(
+    register(
         ToolSpec(
-            name="robot_status",
-            description="Return basic runtime, platform and robot state.",
+            name="system_status",
+            description=tool_description("system_status", "Return system runtime state."),
             parameters={"type": "object", "properties": {}},
         ),
-        lambda args: _robot_status(cfg),
+        lambda args: _system_status(cfg),
     )
-    registry.register(
+    register(
         ToolSpec(
             name="set_eye_expression",
-            description="Set the robot eye expression state.",
+            description=tool_description(
+                "set_eye_expression",
+                "Set assistant eye expression.",
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -63,10 +78,10 @@ def build_registry(cfg: Config) -> ToolRegistry:
         ),
         lambda args: _set_eye_expression(cfg, args),
     )
-    registry.register(
+    register(
         ToolSpec(
             name="calculator",
-            description="Evaluate a safe math expression with functions like sqrt, sin, gcd and round.",
+            description=tool_description("calculator", "Evaluate a safe math expression."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -78,10 +93,10 @@ def build_registry(cfg: Config) -> ToolRegistry:
         ),
         lambda args: _calculator(args),
     )
-    registry.register(
+    register(
         ToolSpec(
             name="remember",
-            description="Persist a short user-provided memory for future chats.",
+            description=tool_description("remember", "Persist a short memory."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -92,51 +107,38 @@ def build_registry(cfg: Config) -> ToolRegistry:
         ),
         lambda args: _remember(cfg, args),
     )
-    registry.register(
-        ToolSpec(
-            name="set_language",
-            description="Switch the active conversation language between English and Slovak.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "language": {
-                        "type": "string",
-                        "enum": sorted(cfg.language.languages),
-                    }
-                },
-                "required": ["language"],
-            },
-        ),
-        lambda args: _set_language(cfg, args),
-    )
-    registry.register(
+    register(
         ToolSpec(
             name="take_photo",
-            description="Capture a photo if a configured safe camera command exists.",
+            description=tool_description(
+                "take_photo",
+                "Capture a small camera photo and attach it to vision-capable LLMs.",
+            ),
             parameters={"type": "object", "properties": {}},
         ),
-        lambda args: _take_photo(cfg),
+        lambda args: take_photo(cfg, args),
     )
-    registry.register(
-        ToolSpec(
-            name="run_safe_cli_tool",
-            description="Run one whitelisted local command by name.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "command": {"type": "string"},
-                    "args": {"type": "array", "items": {"type": "string"}},
+    if cfg.tools.allowed_commands:
+        register(
+            ToolSpec(
+                name="run_safe_cli_tool",
+                description=tool_description("run_safe_cli_tool", "Run a whitelisted local command."),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["command"],
                 },
-                "required": ["command"],
-            },
-        ),
-        lambda args: _run_safe_cli_tool(cfg, args),
-    )
-    if cfg.tools.web_search_enabled:
-        registry.register(
+            ),
+            lambda args: _run_safe_cli_tool(cfg, args),
+        )
+    if cfg.tools.is_tool_enabled("web_search") and web_search_available(cfg):
+        register(
             ToolSpec(
                 name="web_search",
-                description="Search the public web through the configured search provider.",
+                description=tool_description("web_search", "Search the public web."),
                 parameters={
                     "type": "object",
                     "properties": {
@@ -148,26 +150,27 @@ def build_registry(cfg: Config) -> ToolRegistry:
             ),
             lambda args: web_search(cfg, args),
         )
-    if cfg.tools.web_fetch_enabled:
-        registry.register(
-            ToolSpec(
-                name="fetch_url",
-                description="Fetch a public HTTP(S) URL and return cleaned readable text.",
-                parameters={
-                    "type": "object",
-                    "properties": {
-                        "url": {"type": "string"},
-                    },
-                    "required": ["url"],
-                },
+    register(
+        ToolSpec(
+            name="python_interpreter",
+            description=tool_description(
+                "python_interpreter",
+                "Run a bounded Python scratchpad.",
             ),
-            lambda args: fetch_url(cfg, args),
-        )
-
-    for name, override in load_tool_overrides(cfg.prompts.tools_path).items():
+            parameters={
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string"},
+                    "input": {"type": "object"},
+                },
+                "required": ["code"],
+            },
+        ),
+        lambda args: python_interpreter(cfg, args),
+    )
+    for name, override in overrides.items():
         registry.update_spec(
             name,
-            description=override.get("description", ""),
             instructions=override.get("instructions", ""),
         )
 
@@ -182,12 +185,11 @@ def _get_time() -> ToolResult:
         content={
             "iso": now.isoformat(timespec="seconds"),
             "timezone": now.tzname(),
-            "uptime_seconds": round(time.time() - STARTED_AT, 3),
         },
     )
 
 
-def _robot_status(cfg: Config) -> ToolResult:
+def _system_status(cfg: Config) -> ToolResult:
     state_path = Path(cfg.runtime.state_dir) / "eye.json"
     eye = {}
     if state_path.exists():
@@ -196,15 +198,15 @@ def _robot_status(cfg: Config) -> ToolResult:
         except json.JSONDecodeError:
             eye = {"error": "invalid_eye_state"}
     return ToolResult(
-        name="robot_status",
+        name="system_status",
         ok=True,
         content={
-            "agent": cfg.agent.name,
             "platform": platform.platform(),
             "python": platform.python_version(),
             "llm_backend": cfg.llm.backend,
             "stt_backend": cfg.stt.backend,
             "tts_backend": cfg.resolved_tts_backend(),
+            "uptime_seconds": round(time.time() - STARTED_AT, 3),
             "language": language_status_payload(cfg),
             "eye": eye or {"expression": "neutral"},
         },
@@ -272,34 +274,6 @@ def _remember(cfg: Config, args: Dict[str, object]) -> ToolResult:
     )
 
 
-def _set_language(cfg: Config, args: Dict[str, object]) -> ToolResult:
-    ok, content = set_language_state(cfg, str(args.get("language", "")))
-    return ToolResult(name="set_language", ok=ok, content=content)
-
-
-def _take_photo(cfg: Config) -> ToolResult:
-    if not cfg.tools.photo_command:
-        return ToolResult(
-            name="take_photo",
-            ok=False,
-            content={"error": "photo_command_not_configured"},
-        )
-    output_path = Path(cfg.runtime.data_dir) / "photo_latest.jpg"
-    command = [part.format(output=str(output_path)) for part in cfg.tools.photo_command]
-    completed = subprocess.run(
-        command, capture_output=True, text=True, shell=False, timeout=8
-    )
-    return ToolResult(
-        name="take_photo",
-        ok=completed.returncode == 0,
-        content={
-            "path": str(output_path),
-            "returncode": completed.returncode,
-            "stderr": completed.stderr[-800:],
-        },
-    )
-
-
 def _run_safe_cli_tool(cfg: Config, args: Dict[str, object]) -> ToolResult:
     command_name = str(args.get("command", ""))
     base = cfg.tools.allowed_commands.get(command_name)
@@ -331,7 +305,7 @@ def _run_safe_cli_tool(cfg: Config, args: Dict[str, object]) -> ToolResult:
     )
 
 
-_BIN_OPS = {
+SAFE_BINARY_OPERATORS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -341,18 +315,18 @@ _BIN_OPS = {
     ast.Pow: operator.pow,
 }
 
-_UNARY_OPS = {
+SAFE_UNARY_OPERATORS = {
     ast.UAdd: operator.pos,
     ast.USub: operator.neg,
 }
 
-_NAMES = {
+SAFE_NAMES = {
     "pi": math.pi,
     "e": math.e,
     "tau": math.tau,
 }
 
-_FUNCS = {
+SAFE_FUNCTIONS = {
     "abs": abs,
     "round": round,
     "min": min,
@@ -390,20 +364,20 @@ def _eval_math(expression: str) -> int | float:
 def _eval_node(node):
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
         return node.value
-    if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+    if isinstance(node, ast.BinOp) and type(node.op) in SAFE_BINARY_OPERATORS:
         left = _eval_node(node.left)
         right = _eval_node(node.right)
         if isinstance(node.op, ast.Pow) and abs(right) > 100:
             raise ValueError("exponent too large")
-        return _BIN_OPS[type(node.op)](left, right)
-    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
-        return _UNARY_OPS[type(node.op)](_eval_node(node.operand))
-    if isinstance(node, ast.Name) and node.id in _NAMES:
-        return _NAMES[node.id]
+        return SAFE_BINARY_OPERATORS[type(node.op)](left, right)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in SAFE_UNARY_OPERATORS:
+        return SAFE_UNARY_OPERATORS[type(node.op)](_eval_node(node.operand))
+    if isinstance(node, ast.Name) and node.id in SAFE_NAMES:
+        return SAFE_NAMES[node.id]
     if isinstance(node, ast.List) or isinstance(node, ast.Tuple):
         return [_eval_node(item) for item in node.elts]
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-        func = _FUNCS.get(node.func.id)
+        func = SAFE_FUNCTIONS.get(node.func.id)
         if not func:
             raise ValueError(f"function not allowed: {node.func.id}")
         if node.keywords:

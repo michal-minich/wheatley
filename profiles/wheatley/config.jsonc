@@ -80,8 +80,8 @@
   // Speech-to-text backend.
   "stt": {
     // Options: keyboard, faster_whisper, whisper_cpp, remote_fallback.
-    // remote_fallback tries Janka Mac first, then loads the local fallback model below.
-    "backend": "remote_fallback",
+    // remote_fallback tries a configured remote STT endpoint first, then loads the local fallback model below.
+    "backend": "faster_whisper",
     // Local fallback model name/path. Language mode overrides this per language.
     "model": "small.en",
     // Force English recognition for now.
@@ -98,8 +98,8 @@
     "whisper_cpp_args": [
       "--no-timestamps"
     ],
-    // OpenAI-compatible remote STT endpoint on Janka Mac.
-    "remote_base_url": "http://jankas-mac-mini.local:8765/v1",
+    // Optional OpenAI-compatible remote STT endpoint.
+    "remote_base_url": "",
     // API key is optional for the LAN server.
     "remote_api_key": "EMPTY",
     // Remote model requested for the active language. Language mode overrides this.
@@ -136,7 +136,7 @@
         "stt_model": "small.en",
         // STT language hint.
         "stt_language": "en",
-        // Remote STT model to request from Janka Mac. Same quality class as local English.
+        // Remote STT model to request when remote STT is enabled. Same quality class as local English.
         "remote_stt_model": "small.en",
         // TTS backend for English. Keep Piper local/offline here.
         "tts_backend": "piper",
@@ -224,7 +224,7 @@
         "stt_model": "models/whisper/whisper-large-v3-turbo-sk-ct2-int8",
         // STT language hint.
         "stt_language": "sk",
-        // Remote STT model to request from Janka Mac. Full Slovak large-v3 is more accurate than the local turbo fallback.
+        // Remote STT model to request when remote STT is enabled. Full Slovak large-v3 can be more accurate than the local turbo fallback.
         "remote_stt_model": "models/whisper/whisper-large-v3-sk-ct2-int8",
         // Slovak TTS backend. Current default is online Microsoft Edge neural voice for a male voice.
         "tts_backend": "edge_tts",
@@ -328,11 +328,11 @@
     // Optional smarter OpenAI-compatible model checked at each new chat.
     "remote": {
       // If true, try this backend before using the local model.
-      "enabled": true,
+      "enabled": false,
       // Remote backend type. LM Studio uses OpenAI-compatible API.
       "backend": "openai_compat",
-      // LM Studio OpenAI API base URL. /v1 is accepted here.
-      "base_url": "http://jankas-mac-mini.local:1234/v1",
+      // OpenAI-compatible API base URL. /v1 is accepted here.
+      "base_url": "",
       // Fallback model name if a language does not set online_llm_model. Empty string lets LM Studio use its current/default loaded model.
       "model": "",
       // API key for OpenAI-compatible servers. LM Studio usually ignores this.

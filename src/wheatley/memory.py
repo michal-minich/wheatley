@@ -2,22 +2,23 @@ from __future__ import annotations
 
 import json
 import re
-import unicodedata
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from wheatley.config import Config
-from wheatley.llm.base import LLMBackend, LLMMessage
+from wheatley.llm.audit import log_system_llm_event
+from wheatley.llm.base import LLMBackend, LLMMessage, LLMResponse
+from wheatley.text import normalize_words
 
 
 AUTO_MEMORY_FILENAME = "auto_memory.md"
 UPDATE_INSTRUCTIONS_FILENAME = "memory_update.md"
 CONSOLIDATE_INSTRUCTIONS_FILENAME = "memory_consolidate.md"
-LEGACY_BUILDER_FILENAME = "memory_builder.md"
-STATE_PATH = Path("runtime/state/memory_state.json")
-CANDIDATES_PATH = Path("runtime/state/memory_candidates.jsonl")
+STATE_RELATIVE_PATH = Path("runtime/state/memory_state.json")
+CANDIDATES_RELATIVE_PATH = Path("runtime/state/memory_candidates.jsonl")
 
 SECTION_TITLES = {
     "stable_user_facts": "Stable User Facts",
@@ -92,15 +93,28 @@ def refresh_auto_memory(
     cfg: Config,
     llm: LLMBackend,
     mode: str,
-    notify: Optional[Callable[[str], None]] = None,
+    notify: Optional[Callable[..., None]] = None,
 ) -> MemoryRefreshResult:
     if not cfg.memory.auto_enabled:
         return MemoryRefreshResult()
 
     state = _load_state(cfg)
     result = MemoryRefreshResult()
-    include_assistant = _include_assistant_text(cfg, mode)
     now = _now()
+    if _full_rewrite_due(cfg, mode, state, now):
+        _notify(cfg, notify, "consolidate_start")
+        try:
+            if _run_full_rewrite(cfg, llm, mode, now):
+                result.consolidated = True
+            state.last_full_rewrite_at = now
+            _advance_incremental_state(cfg, state, now)
+            _save_state(cfg, state)
+            _notify(cfg, notify, "consolidate_done")
+        except Exception:
+            return result
+        return result
+
+    include_assistant = _include_assistant_text(cfg, mode)
     state_dirty = _bootstrap_incremental_offset(cfg, state, mode)
     read_result = _read_new_turns(
         Path(cfg.runtime.turn_log),
@@ -159,16 +173,12 @@ def memory_consolidate_instructions_path(cfg: Config) -> Path:
     return Path(cfg.profile_dir) / CONSOLIDATE_INSTRUCTIONS_FILENAME
 
 
-def memory_builder_path(cfg: Config) -> Path:
-    return Path(cfg.profile_dir) / LEGACY_BUILDER_FILENAME
-
-
 def memory_state_path(cfg: Config) -> Path:
-    return Path(cfg.profile_dir) / STATE_PATH
+    return Path(cfg.profile_dir) / STATE_RELATIVE_PATH
 
 
 def memory_candidates_path(cfg: Config) -> Path:
-    return Path(cfg.profile_dir) / CANDIDATES_PATH
+    return Path(cfg.profile_dir) / CANDIDATES_RELATIVE_PATH
 
 
 def _include_assistant_text(cfg: Config, mode: str) -> bool:
@@ -236,6 +246,8 @@ def _parse_turn(raw: bytes, include_assistant: bool) -> dict:
         record = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {}
+    if str(record.get("source", "")).strip().lower() == "idle":
+        return {}
     user_text = str(record.get("user_text", "")).strip()
     if not user_text:
         return {}
@@ -257,11 +269,16 @@ def _extract_incremental_patch(
     mode: str,
 ) -> _Patch:
     prompt = _build_incremental_prompt(cfg, turns, mode)
-    response = llm.complete(
-        [
+    response = _complete_memory_llm(
+        cfg,
+        llm,
+        purpose="memory_incremental_update",
+        mode=mode,
+        messages=[
             LLMMessage("system", _memory_system_prompt(cfg)),
             LLMMessage("user", prompt),
-        ]
+        ],
+        metadata={"turn_count": len(turns)},
     )
     return _patch_from_payload(_load_json_payload(response.content))
 
@@ -281,8 +298,12 @@ def _run_full_rewrite(
         "now": now,
         "mode": mode,
     }
-    response = llm.complete(
-        [
+    response = _complete_memory_llm(
+        cfg,
+        llm,
+        purpose="memory_consolidation",
+        mode=mode,
+        messages=[
             LLMMessage("system", _memory_system_prompt(cfg)),
             LLMMessage(
                 "user",
@@ -294,7 +315,11 @@ def _run_full_rewrite(
                 + "current_projects, and recent_context.\n\n"
                 + json.dumps(payload, ensure_ascii=True),
             ),
-        ]
+        ],
+        metadata={
+            "recent_turn_count": len(payload["recent_turns"]),
+            "candidate_count": len(payload["memory_candidates"]),
+        },
     )
     raw = _load_json_payload(response.content)
     markdown = str(raw.get("auto_memory_md", "")).strip() if isinstance(raw, dict) else ""
@@ -306,6 +331,50 @@ def _run_full_rewrite(
     else:
         markdown = _normalize_auto_memory_markdown(markdown, now, cfg)
     return _write_if_changed(auto_memory_path(cfg), markdown.rstrip() + "\n")
+
+
+def _complete_memory_llm(
+    cfg: Config,
+    llm: LLMBackend,
+    *,
+    purpose: str,
+    mode: str,
+    messages: List[LLMMessage],
+    metadata: Optional[Dict[str, object]] = None,
+) -> LLMResponse:
+    started_at = time.perf_counter()
+    model_name = _llm_model_name(cfg, llm)
+    try:
+        response = llm.complete(messages)
+    except Exception as exc:
+        log_system_llm_event(
+            cfg.runtime.system_llm_log,
+            purpose=purpose,
+            mode=mode,
+            model_name=model_name,
+            messages=messages,
+            duration_seconds=time.perf_counter() - started_at,
+            error=exc,
+            metadata=metadata,
+        )
+        raise
+    log_system_llm_event(
+        cfg.runtime.system_llm_log,
+        purpose=purpose,
+        mode=mode,
+        model_name=model_name,
+        messages=messages,
+        duration_seconds=time.perf_counter() - started_at,
+        response=response,
+        metadata=metadata,
+    )
+    return response
+
+
+def _llm_model_name(cfg: Config, llm: LLMBackend) -> str:
+    llm_cfg = getattr(llm, "cfg", None)
+    model = getattr(llm_cfg, "model", "")
+    return str(model or cfg.llm.model)
 
 
 def _apply_incremental_patch(cfg: Config, patch: _Patch, now: str) -> bool:
@@ -390,9 +459,6 @@ def _update_instructions(cfg: Config) -> str:
     custom = _read_text(memory_update_instructions_path(cfg)).strip()
     if custom:
         return custom
-    legacy = _read_text(memory_builder_path(cfg)).strip()
-    if legacy:
-        return legacy
     return (
         "# Memory Update Instructions\n"
         "- Use user text as evidence. Assistant text is context only when provided.\n"
@@ -407,9 +473,6 @@ def _consolidate_instructions(cfg: Config) -> str:
     custom = _read_text(memory_consolidate_instructions_path(cfg)).strip()
     if custom:
         return custom
-    legacy = _read_text(memory_builder_path(cfg)).strip()
-    if legacy:
-        return legacy
     return (
         "# Memory Consolidation Instructions\n"
         "- Rewrite the generated memory into compact, non-duplicated bullets.\n"
@@ -621,6 +684,8 @@ def _full_rewrite_due(
     state: _MemoryState,
     now: str,
 ) -> bool:
+    if not cfg.memory.consolidation_enabled:
+        return False
     if cfg.memory.full_rewrite_requires_online and mode != "online":
         return False
     if (
@@ -638,6 +703,16 @@ def _full_rewrite_due(
     if current is None:
         return False
     return current - last >= timedelta(days=cfg.memory.full_rewrite_interval_days)
+
+
+def _advance_incremental_state(cfg: Config, state: _MemoryState, now: str) -> None:
+    turn_log = Path(cfg.runtime.turn_log)
+    try:
+        state.last_processed_offset = turn_log.stat().st_size if turn_log.exists() else 0
+    except OSError:
+        state.last_processed_offset = 0
+    state.last_processed_timestamp = now
+    state.last_incremental_update_at = now
 
 
 def _load_state(cfg: Config) -> _MemoryState:
@@ -686,10 +761,14 @@ def _save_state(cfg: Config, state: _MemoryState) -> None:
     )
 
 
-def _notify(cfg: Config, notify: Optional[Callable[[str], None]], kind: str) -> None:
+def _notify(cfg: Config, notify: Optional[Callable[..., None]], kind: str) -> None:
     if not notify:
         return
-    notify(_localized_notice(cfg, kind))
+    message = _localized_notice(cfg, kind)
+    try:
+        notify(message, kind)
+    except TypeError:
+        notify(message)
 
 
 def _localized_notice(cfg: Config, kind: str) -> str:
@@ -736,9 +815,7 @@ def _clean_fact(value) -> str:
 
 
 def _normalize_bullet(value: str) -> str:
-    text = unicodedata.normalize("NFKD", value.lower())
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+    return normalize_words(value)
 
 
 def _fact_tokens(value: str) -> set[str]:

@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import queue
-import re
 import threading
 import time
-import unicodedata
 import wave
 from collections import deque
 from pathlib import Path
 from typing import Callable, Optional
 
+from wheatley.audio.devices import input_stream_device_kwargs
+from wheatley.audio.log_paths import dated_audio_path
 from wheatley.audio.playback import current_playback_age_seconds, stop_audio_playback
 from wheatley.config import AudioConfig
 from wheatley.stt.base import Transcription
+from wheatley.text import normalize_words
 
 
 TranscribeAudio = Callable[[Path], Transcription]
@@ -78,6 +79,7 @@ class SpeechInterruptMonitor:
                 dtype="int16",
                 blocksize=blocksize,
                 callback=callback,
+                **input_stream_device_kwargs(self.cfg, sd),
             ):
                 while not self._stop_event.is_set() and not self.interrupt_event.is_set():
                     try:
@@ -161,9 +163,13 @@ class SpeechInterruptMonitor:
                 self.pause_event.clear()
 
     def _write_candidate(self, np, frames) -> Path:
-        output_dir = Path(self.cfg.utterance_dir) / "interrupts"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        path = output_dir / f"interrupt_{time.time_ns()}.wav"
+        path = dated_audio_path(
+            Path(self.cfg.utterance_dir),
+            "interrupt",
+            timestamp_ns=time.time_ns(),
+            subdir="interrupts",
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
         audio = np.concatenate(frames, axis=0)
         with wave.open(str(path), "wb") as handle:
             handle.setnchannels(self.cfg.channels)
@@ -174,21 +180,14 @@ class SpeechInterruptMonitor:
 
 
 def is_stop_interrupt(text: str, phrase: str = "stop", max_words: int = 4) -> bool:
-    normalized = _normalize(text)
-    target = _normalize(phrase)
+    normalized = normalize_words(text)
+    target = normalize_words(phrase)
     if not normalized or not target:
         return False
     words = normalized.split()
     if len(words) > max_words:
         return False
     return target in words
-
-
-def _normalize(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text.lower())
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    text = re.sub(r"[^a-z0-9\s]+", " ", text)
-    return " ".join(text.split())
 
 
 def _rms(np, block) -> float:
